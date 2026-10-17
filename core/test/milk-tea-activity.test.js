@@ -178,6 +178,41 @@ test('exchange quantity maximum respects inventory, locks, diamonds and settleme
   }
 });
 
+test('automatic seed purchase sends the maximum affordable quantity capped by remaining limit', async () => {
+  const { automaticSeedPurchaseParams } = require('../src/services/activity-milk-tea');
+  for (const [gold, expected] of [[75000, 7], [1000000, 100], [2000000, 108]]) {
+    const { service, calls } = setup({ inventory: [], account: { gold } });
+    const state = await service.getMilkTea();
+    const params = automaticSeedPurchaseParams(state);
+    assert.deepEqual(params, { goodsId: '301', count: expected });
+    await service.operateMilkTea('buy', params);
+    assert.deepEqual(calls.filter(x => Number(x.cmd) === 1).map(x => x.shop_buy),
+      [{ goods_id: '301', count: String(expected) }]);
+  }
+});
+
+test('automatic seed purchase skips unaffordable, locked, paid, sold-out and inactive goods', async () => {
+  const { automaticSeedPurchaseParams } = require('../src/services/activity-milk-tea');
+  for (const options of [
+    { inventory: [], account: { gold: 9999 } }, { diamond: true }, { unlocked: false },
+    { now: WINDOW.startTime - 1 }, { now: WINDOW.settleTime }, { now: WINDOW.endTime + 1 },
+  ]) {
+    const { service, calls } = setup(options);
+    assert.equal(automaticSeedPurchaseParams(await service.getMilkTea()), null);
+    assert.ok(!calls.some(x => Number(x.cmd) === 1));
+  }
+  const state = await setup().service.getMilkTea();
+  for (const changes of [
+    { remaining: 0, maxPurchasable: 0 }, { category_tag: 'other' },
+    { maxPurchasable: undefined }, { maxPurchasable: 1.5 },
+  ]) {
+    assert.equal(automaticSeedPurchaseParams({ ...state, goods: [{ ...state.goods[0], ...changes }] }), null);
+  }
+  const goods = { ...state.goods[0], remaining: 8, maxPurchasable: 8 };
+  assert.deepEqual(automaticSeedPurchaseParams({ ...state, goods: [goods, { ...goods, id: '302' }] }),
+    { goodsId: '301', count: 8 });
+});
+
  test('growth fund requires purchase even when a tier reports claimable', async () => {
   for (const fundUnlocked of [false, true]) {
     for (const fundState of [1, 2, 3]) {

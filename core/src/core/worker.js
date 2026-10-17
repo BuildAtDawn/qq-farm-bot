@@ -934,9 +934,8 @@ async function runStarActivityAutoClaims() {
                     if (!Number(state.summary.shop_open_at) && !['shareDaily', 'shareRewards', 'fundRewards'].includes(action)) continue;
                     let params = {};
                     if (action === 'buy') {
-                        const goods = state.goods.find(x => x.category_tag === 'seed' && x.unlocked && x.remaining > 0 && !x.paid && x.affordable);
-                        if (!goods) continue;
-                        params = { goodsId: goods.id, count: 1 };
+                        params = require('../services/activity-milk-tea').automaticSeedPurchaseParams(state);
+                        if (!params) continue;
                     }
                     if (action === 'hire') {
                         const capacity = state.levels.find(x => x.level === Number(state.shop.level))?.employee_slot_count || 0;

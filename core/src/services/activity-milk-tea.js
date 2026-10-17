@@ -227,7 +227,13 @@ function automaticInteractionParams(state, value, now) {
   if (state.phase !== 'business' || !shift || Number(shift.begin_at) > now || Number(shift.end_at) <= now || state.work.interact_done || Number(shift.interact_count) >= Number(shift.interact_limit)) return null;
   return { interactionType: normalizeInteractionType(value) };
 }
+function automaticSeedPurchaseParams(state) {
+  if (state.phase !== 'business') return null;
+  const goods = state.goods.find(x => x.category_tag === 'seed' && x.unlocked && x.remaining > 0
+    && !x.paid && x.affordable && Number.isSafeInteger(x.maxPurchasable) && x.maxPurchasable > 0);
+  return goods ? { goodsId: goods.id, count: goods.maxPurchasable } : null;
+}
 function reserveMilkTeaFruit(itemId, enabled, now) {
   return enabled === true && phase(now) === 'business' && catalog.MilkTeaRecipeConfig.some(recipe => Number(recipe.fruit_item_id?.split(':')[0]) === Number(itemId));
 }
-module.exports = { createMilkTeaService, WINDOW, ACTIONS, AUTO_ACTIONS, phase, normalizeWireMaps, reserveMilkTeaFruit, compareShopGoods, normalizeHireOptions, selectHireCandidate, normalizeInteractionType, automaticInteractionParams };
+module.exports = { createMilkTeaService, WINDOW, ACTIONS, AUTO_ACTIONS, phase, normalizeWireMaps, reserveMilkTeaFruit, compareShopGoods, normalizeHireOptions, selectHireCandidate, normalizeInteractionType, automaticInteractionParams, automaticSeedPurchaseParams };
