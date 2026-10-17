@@ -60,7 +60,7 @@
 ### 把农场跑起来
 
 ```bash
-git clone https://github.com/xxxscarlxrd404/qq-farm-bot.git
+git clone https://github.com/BuildAtDawn/qq-farm-bot.git
 cd qq-farm-bot
 
 corepack enable
@@ -92,7 +92,7 @@ pnpm dev:web
 ## 🐳 Docker 部署
 
 ```bash
-git clone https://github.com/xxxscarlxrd404/qq-farm-bot.git
+git clone https://github.com/BuildAtDawn/qq-farm-bot.git
 cd qq-farm-bot
 docker compose up -d --build
 ```
@@ -267,13 +267,6 @@ qq-farm-bot/
 
 不得通过更改项目名称、界面、打包方式、增加代理服务或拆分组件来规避上述限制。自建、学习、研究、测试、个人娱乐以及符合许可证定义的非商业组织用途，不等于获得商业授权。自愿赞助不构成商业授权，也不改变许可证限制。
 
-### 来源与第三方权利
-
-本项目的部分协议、配置、资源路径、运行机制和实现思路，来自官方客户端可观察行为、网络公开资料、抓包/逆向分析及社区讨论；并非全部由本项目作者独立原创，也不代表作者是相关官方产品、服务、协议、素材或第三方代码的作者、维护者或权利人。QQ、QQ 农场及相关名称、商标、客户端、服务端、图片、音频、配置和其他内容的权利归其各自权利人所有。
-
-本项目作者仅对自己独立创作且有权授权的部分作出许可；对于来源于网络、官方客户端或第三方的内容，不主张超出法律和原始权利人许可范围的权利。
-
-仓库中的第三方依赖、官方素材、生成文件、协议描述和其他外部内容可能受其各自条款约束，不因本许可证而获得额外授权。使用者应自行确认来源、许可、隐私和合规要求；发现不应公开的内容请联系维护者处理。
 
 ### 使用风险
 
