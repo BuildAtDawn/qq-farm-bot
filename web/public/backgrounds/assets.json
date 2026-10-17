@@ -1,0 +1,29 @@
+{
+  "source": "AI generated decorative landscape; user-approved UI concept on 2026-10-16",
+  "model": "gpt-image-2.5-sunburst",
+  "source_sha256": "93dccf3c334bb3642859d36ac54de7c860acd70aa3cbc02641a4045e41a6dbfe",
+  "usage": "Decorative only; does not represent actual farm, weather or activity state",
+  "assets": [
+    {
+      "file": "farm-day.webp",
+      "width": 1672,
+      "height": 940,
+      "bytes": 187480,
+      "sha256": "82776640b58136b4351440b0eb543b7d934ceb3b6d8c460cdf46efb72f71966a"
+    },
+    {
+      "file": "farm-day-mobile.webp",
+      "width": 900,
+      "height": 506,
+      "bytes": 64674,
+      "sha256": "bf16a3f80a17761ee066e9ac38e6f61aab8a0d48e842c76660a7a9a1563035d5"
+    },
+    {
+      "file": "farm-market.webp",
+      "width": 1672,
+      "height": 940,
+      "bytes": 231950,
+      "sha256": "e14d3e5736e22d6aa26aecfc234ecf6b2c807b8fff8abfdf0645daa3f30d16f5"
+    }
+  ]
+}

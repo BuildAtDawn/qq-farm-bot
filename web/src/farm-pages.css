@@ -1,0 +1,141 @@
+/* Applied explicitly to non-game content surfaces; land cards and activity art keep their own styles. */
+.farm-content-card {
+  min-width: 0;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  box-shadow: 0 3px 16px rgb(48 78 34 / 3%);
+}
+.farm-content-card h2,
+.farm-content-card h3,
+.farm-content-card h4 {
+  letter-spacing: 0;
+}
+.farm-data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.farm-data-table th {
+  padding: 12px 16px;
+  background: var(--surface-2);
+  color: var(--muted-text);
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: 0;
+}
+.farm-data-table td {
+  padding: 14px 16px;
+  font-size: 13px;
+}
+.farm-data-table tbody tr {
+  border-color: var(--surface-border);
+}
+.farm-data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+}
+.farm-page-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 24px;
+  padding: 0;
+  overflow-x: auto;
+  border: 0;
+  border-bottom: 1px solid var(--surface-border);
+  border-radius: 0;
+  background: transparent;
+}
+.farm-page-tabs > button {
+  position: relative;
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 10px 2px 13px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted-text);
+  font-size: 13px;
+}
+.farm-page-tabs > button[aria-pressed='true'],
+.farm-page-tabs > button[aria-selected='true'] {
+  border-bottom-color: var(--theme-primary);
+  background: transparent;
+  color: var(--theme-primary);
+  font-weight: 650;
+}
+.farm-page-tabs > button:hover {
+  color: var(--theme-primary);
+}
+@media (max-width: 639px) {
+  .farm-content-card {
+    border-radius: 8px;
+  }
+  .farm-page-tabs {
+    gap: 20px;
+  }
+  .farm-page-tabs > button {
+    font-size: 13px;
+  }
+  .farm-data-table td,
+  .farm-data-table th {
+    padding: 11px 12px;
+  }
+}
+.farm-product {
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  box-shadow: none;
+}
+.farm-product-art {
+  height: 90px;
+  background: linear-gradient(140deg, #f6f8ef, #eef3e4);
+  border-bottom: 1px solid var(--surface-border);
+}
+.farm-product-art > span {
+  padding: 4px 8px;
+  color: var(--muted-text);
+  background: #fffef6c9;
+  font-size: 12px;
+}
+.farm-product-art > img {
+  max-height: 58px;
+  max-width: 64px;
+  filter: drop-shadow(0 4px 5px rgb(67 94 44 / 10%));
+}
+.farm-product-body {
+  gap: 3px;
+  padding: 15px;
+}
+.farm-product-body > .text-center {
+  text-align: left;
+}
+.farm-product-name {
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+.farm-product-body > .text-amber-600 {
+  color: #987032;
+  font-size: 15px;
+  font-weight: 650;
+}
+.farm-product-body > .base-button {
+  margin-top: auto;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.farm-product-body > p:last-of-type {
+  margin-bottom: 12px;
+}
+@media (max-width: 639px) {
+  .farm-product-body {
+    padding: 12px;
+  }
+  .farm-product-art {
+    height: 80px;
+  }
+  .farm-product-body > .text-amber-600 {
+    font-size: 13px;
+  }
+}

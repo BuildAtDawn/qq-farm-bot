@@ -1,0 +1,14 @@
+{
+  "purpose": "User-approved Milk Tea Workbench V2 decorative background; not official game or account state",
+  "model": "gpt-image-2.5-sunburst",
+  "generatedAt": "2026-10-17",
+  "source_sha256": "1bb95dcf92c78737ac28d479151074a74a3dbff5337e5c50fd8ee1a29580efae",
+  "prompt": "art-prompt.txt",
+  "prompt_sha256": "9e8473a4d0acffde1a125cf121a6f8183c1af11df93dc40266f8037038e8b137",
+  "assets": [
+    {
+      "file": "tea-atelier.jpg",
+      "sha256": "97f7529a1fff0cd886678a4083968f969124fe7a9969cf0bfe4f7946d7d31a65"
+    }
+  ]
+}
