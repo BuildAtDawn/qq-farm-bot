@@ -78,6 +78,28 @@
 .tea-metric > img { position: absolute; right: 17px; top: 20px; width: 43px; height: 47px; opacity: .8; }
 .tea-metric:nth-child(3) > strong { color: #39749b; }
 .tea-metric:nth-child(4) > strong { color: #99712c; }
+.tea-growth-summary { display: flex; align-items: center; gap: 18px; padding: 17px 22px 15px; margin: 0 22px; border-bottom: 1px solid var(--tea-border); background: color-mix(in srgb, var(--tea-positive) 60%, var(--tea-surface)); }
+.tea-growth-art { width: 58px; height: 46px; flex: 0 0 auto; object-fit: contain; }
+.tea-growth-summary-main { min-width: 0; flex: 1; }
+.tea-growth-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.tea-growth-summary-heading > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 9px; min-width: 0; }
+.tea-growth-kicker { font-size: 13px; font-weight: 650; }
+.tea-growth-summary-heading strong { font-size: 23px; color: var(--tea-primary); }
+.tea-growth-summary-heading strong small { font-size: 11px; color: var(--tea-muted); }
+.tea-growth-next { color: var(--tea-muted); font-size: 11px; }
+.tea-growth-summary-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 12px; flex-shrink: 0; }
+.tea-button--growth { min-height: 30px; padding: 5px 10px; font-size: 11px !important; }
+.tea-growth-progress { margin-top: 11px; }
+.tea-growth-progress .tea-progress-label { margin-bottom: 7px; }
+.tea-growth-summary .tea-next-unlock { margin-top: 8px !important; font-size: 10px; line-height: 1.6; }
+.tea-growth-boost { display: inline-flex; align-items: center; gap: 9px; min-width: 170px; padding: 8px 10px; border: 1px solid var(--tea-border); border-radius: 6px; background: var(--tea-surface); color: var(--tea-text); text-align: left; cursor: pointer; }
+.tea-growth-boost:hover:not(:disabled) { border-color: var(--tea-primary); background: var(--tea-surface); }
+.tea-growth-boost:disabled { cursor: not-allowed; opacity: .55; }
+.tea-growth-boost > img { width: 29px; height: 31px; flex: 0 0 auto; }
+.tea-growth-boost > span:nth-child(2) { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.tea-growth-boost b { font-size: 11px; font-weight: 600; }
+.tea-growth-boost small { margin-top: 2px; color: var(--tea-muted); font-size: 10px; white-space: nowrap; }
+.tea-growth-boost > span:last-child { color: var(--tea-primary); font-size: 15px; }
 .tea-shop-columns { display: grid; grid-template-columns: minmax(0, 1fr) 285px; gap: 25px; padding: 24px 26px 0; }
 .tea-operating { min-width: 0; }
 .tea-shop-name { min-width: 0; overflow-wrap: anywhere; }
@@ -545,6 +567,7 @@
 @media (max-width: 1250px) {
   .tea-workspace-layout { grid-template-columns: 165px minmax(0, 1fr); }
   .tea-shop-columns { grid-template-columns: minmax(0, 1fr); }
+  .tea-growth-summary { margin-inline: 16px; }
   .tea-workspace-main .tea-rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; border-left: 0; border-top: 1px solid var(--tea-border); padding: 20px 0 0; }
   .tea-workspace-main .tea-rail-section { border-bottom: 0; margin: 0; }
   .tea-workspace-main .tea-rail-section:last-child { grid-column: 1 / -1; }
@@ -572,6 +595,15 @@
   .tea-title-line { gap: 5px; }
   .tea-window { font-size: 9px; }
   .tea-workspace-nav { padding-inline: 12px; }
+  .tea-growth-summary { align-items: flex-start; gap: 10px; padding: 14px 16px 13px; margin-inline: 0; }
+  .tea-growth-art { width: 40px; height: 36px; margin-top: 3px; }
+  .tea-growth-summary-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .tea-growth-summary-actions { justify-content: flex-start; gap: 8px; }
+  .tea-growth-summary-actions .tea-button--growth { min-height: 27px; padding: 4px 8px; }
+  .tea-growth-boost { min-width: 125px; padding: 7px 8px; gap: 6px; }
+  .tea-growth-boost > img { width: 24px; height: 26px; }
+  .tea-growth-boost b { font-size: 10px; }
+  .tea-growth-boost small { font-size: 9px; }
   .tea-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-inline: 16px; padding-block: 17px 0; }
   .tea-shop-columns { padding: 18px 16px 0; gap: 17px; }
   .tea-stock-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

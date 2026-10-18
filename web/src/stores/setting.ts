@@ -13,6 +13,7 @@ export interface AutomationConfig {
   task?: boolean
   star_passport_claim?: boolean
   star_solar_claim?: boolean
+  star_solar_quiz_claim?: boolean
   star_record_claim?: boolean
   qingmei_seed_claim?: boolean
   qingmei_wine_brew?: boolean
@@ -36,6 +37,7 @@ export interface AutomationConfig {
   share_reward_daily?: boolean
   share_reward_milestones?: boolean
   pet_diary_adopt?: boolean
+  milk_tea_share?: boolean
   milk_tea_share_daily?: boolean
   milk_tea_share_rewards?: boolean
   milk_tea_fund_rewards?: boolean
@@ -49,6 +51,8 @@ export interface AutomationConfig {
   milk_tea_hire?: boolean
   milk_tea_hire_duration?: number
   milk_tea_hire_talent?: number
+  milk_tea_hire_primary_talent?: number
+  milk_tea_hire_backup_talent?: number
   milk_tea_seed_buy?: boolean
   pet_diary_feed?: boolean
   pet_diary_draw?: boolean

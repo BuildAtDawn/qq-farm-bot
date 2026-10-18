@@ -26,6 +26,7 @@ async function refresh() {
   try {
     const { data } = await api.get('/api/activity/solar-terms')
     if (version !== generation) return
+    if (!data.ok || !data.solarTerms) throw new Error(data.error || '节令读取失败')
     solar.value = data.solarTerms
     error.value = ''
   }
@@ -45,7 +46,17 @@ async function claim(term: { id: number }) {
     const { data } = await api.post('/api/activity/solar-terms/claim', { termId: term.id })
     if (version !== generation) return
     if (!data.ok) throw new Error(data.error || '领取失败')
-    solar.value = data.solarTerms
+    if (data.solarTerms?.version === 'v2' || solar.value?.version !== 'v2') solar.value = data.solarTerms
+    else if (solar.value) {
+      // A successful base claim may be followed by a failed V2 refresh.
+      const claimed = solar.value.terms.find(item => item.id === term.id)
+      if (claimed) {
+        claimed.directClaimed = true
+        claimed.claimable = false
+      }
+      solar.value.claimableCount = solar.value.terms.filter(item => item.claimable).length
+    }
+    if (solar.value && data.refreshWarning) solar.value.warning = data.refreshWarning
     toast.success('节令奖励领取完成')
   }
   catch (e: any) { if (version === generation) toast.error(e.response?.data?.error || e.message) }
@@ -53,6 +64,33 @@ async function claim(term: { id: number }) {
     busy.value = false
     if (version !== generation && currentAccountId.value) refresh()
   }
+}
+async function answer(payload: { id: number, optionIndex: number }) {
+  if (disposed || busy.value || !currentAccountId.value) return
+  const version = generation
+  busy.value = true
+  try {
+    const { data } = await api.post('/api/activity/solar-terms/answer', {
+      termId: payload.id,
+      optionIndex: payload.optionIndex,
+    })
+    if (version !== generation) return
+    if (!data.ok) throw new Error(data.error || '答题失败')
+    solar.value = data.solarTerms
+    toast[data.correct ? 'success' : 'error'](data.correct ? '答题正确，奖励已发放' : '答案错误，明天再来')
+  }
+  catch (e: any) { if (version === generation) toast.error(e.response?.data?.error || e.message) }
+  finally {
+    busy.value = false
+    if (version !== generation && currentAccountId.value) refresh()
+  }
+}
+function poll() {
+  if (document.visibilityState !== 'visible') return
+  const now = Math.floor(Date.now() / 1000)
+  if (solar.value
+    && !solar.value.terms.some(term => term.startTime <= now && now <= term.endTime)) return
+  refresh()
 }
 function visibility() { if (document.visibilityState === 'visible') refresh() }
 watch(currentAccountId, async () => {
@@ -64,7 +102,7 @@ watch(currentAccountId, async () => {
 })
 onMounted(() => {
   refresh()
-  timer = setInterval(() => { if (document.visibilityState === 'visible') refresh() }, 30_000)
+  timer = setInterval(poll, 30_000)
   document.addEventListener('visibilitychange', visibility)
 })
 onUnmounted(() => {
@@ -84,6 +122,6 @@ onUnmounted(() => {
     <p v-if="!currentAccountId" class="rounded-xl bg-white p-8 text-center text-sm text-gray-500 dark:bg-gray-800">请先选择账号</p>
     <p v-else-if="error" role="alert" class="rounded-xl bg-red-50 p-6 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
     <p v-else-if="!solar" class="rounded-xl bg-white p-8 text-center text-sm text-gray-500 dark:bg-gray-800" role="status">{{ busy ? '正在读取节令…' : '暂无节令数据' }}</p>
-    <HeluSolarTermsPanel v-else :solar-terms="solar" :loading="busy" :labels="labels" @claim="claim" />
+    <HeluSolarTermsPanel v-else :key="String(currentAccountId)" :solar-terms="solar" :loading="busy" :labels="labels" @claim="claim" @answer="answer" />
   </section>
 </template>

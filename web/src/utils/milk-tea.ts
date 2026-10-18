@@ -145,7 +145,7 @@ export interface TeaState {
   work: { my_shift: TeaShift | null, slips: TeaWorkSlip[], interact_done: boolean, talent_name?: string }
   share: null | {
     current_score: TeaAmount
-    daily?: { daily_reward_claimed: boolean }
+    daily?: { daily_reward_claimed: boolean, first_share_awarded?: boolean }
     my_pool?: { claimed_count: number, claim_limit: number }
     milestones: { tier_id: number, threshold: TeaAmount, state: number, rewards: TeaItem[] }[]
   }
@@ -190,6 +190,23 @@ export function teaDuration(seconds: unknown) {
   const total = Math.max(0, Math.floor(value))
   return `${Math.floor(total / 3600).toString().padStart(2, '0')}:${Math.floor(total % 3600 / 60).toString().padStart(2, '0')}`
 }
+export function teaCountdown(seconds: unknown) {
+  const value = Number(seconds)
+  if (!Number.isFinite(value) || value < 0)
+    return '暂不可估算'
+  const total = Math.floor(value / 60) * 60
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor(total % 86400 / 3600)
+  const minutes = Math.floor(total % 3600 / 60)
+  const parts = []
+  if (days > 0)
+    parts.push(`${days}天`)
+  if (hours > 0)
+    parts.push(`${hours}小时`)
+  if (minutes > 0)
+    parts.push(`${minutes}分钟`)
+  return parts.length ? `${parts.join('')}后` : '不到1分钟后'
+}
 export function teaCurrencyImage(item: Partial<TeaItem>) {
   const id = String(item.id ?? item.itemId)
   return ({ 1001: '/game-config/resource-icons/gold.png', 1004: '/game-config/resource-icons/diamond.png', 1041: teaImage('icon_s4_ticket'), 1042: teaImage('icon_s4_boost') } as Record<string, string>)[id] || item.image || item.imageUrl || ''
@@ -197,6 +214,13 @@ export function teaCurrencyImage(item: Partial<TeaItem>) {
 export function teaItemName(item: Partial<TeaItem>) {
   return item.name || ({ 1001: '金币', 1004: '钻石', 1041: '奶茶券', 1042: '宣传喇叭' } as Record<string, string>)[String(item.id ?? item.itemId)]
     || (item.id ?? item.itemId ? `物品 ${item.id ?? item.itemId}` : '奖励')
+}
+export function teaScaleRewards(items: TeaItem[] | undefined, multiplier: number) {
+  const factor = Number.isSafeInteger(multiplier) && multiplier > 0 ? BigInt(multiplier) : 1n
+  return (items || []).map(item => ({
+    ...item,
+    count: (teaInteger(item.count) * factor).toString(),
+  }))
 }
 export function teaBalance(state: TeaState, id: TeaAmount) {
   return state.balances?.find(item => String(item.itemId ?? item.id) === String(id))?.count
@@ -344,11 +368,11 @@ export function teaActionReason(state: TeaState | null, action: string, params: 
   const phase = teaPhase(state, now)
   if (!['business', 'settling'].includes(phase))
     return '活动未开始或已结束'
-  const settlementActions = ['cashier', 'wages', 'buy', 'shareDaily', 'shareRewards', 'fundRewards']
+  const settlementActions = ['cashier', 'wages', 'buy', 'share', 'shareDaily', 'shareRewards', 'fundRewards']
   if (phase !== 'business' && !settlementActions.includes(action))
     return '结算期不支持此操作'
   const opened = teaInteger(state.summary.shop_open_at) > 0n
-  if (!opened && !['create', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action))
+  if (!opened && !['create', 'share', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action))
     return '请先开店营业'
   if (action === 'create' || action === 'rename') {
     if (!teaNameValid(String(params.shopName || '')))
@@ -363,8 +387,12 @@ export function teaActionReason(state: TeaState | null, action: string, params: 
     return state.summary.has_unclaimed_wage ? '' : '暂无可领取工资'
   if (action === 'upgrade')
     return teaCanUpgrade(state, now) ? '' : '尚未达到升级条件'
-  if (action === 'boost')
-    return state.shop && teaInteger(teaBalance(state, state.shop.sales_item_id)) > 0n ? '' : '宣传喇叭不足'
+  if (action === 'boost') {
+    const count = Number(params.count ?? 1)
+    return state.shop && Number.isSafeInteger(count) && count >= 1
+      && teaInteger(teaBalance(state, state.shop.sales_item_id)) >= BigInt(count)
+      ? '' : '宣传喇叭不足'
+  }
   if (action === 'craft') {
     const available = teaFruitUids(state.recipes || [])
     return Array.isArray(params.fruitUids) && params.fruitUids.length > 0 && params.fruitUids.every((uid: unknown) => available.includes(String(uid))) ? '' : '没有可制作的已解锁果实批次'
@@ -391,6 +419,8 @@ export function teaActionReason(state: TeaState | null, action: string, params: 
     return typeof params.disabled === 'boolean' ? '' : '雇佣状态无效'
   if (action === 'shareDaily')
     return state.share?.daily && !state.share.daily.daily_reward_claimed ? '' : '今日无可领取快乐值'
+  if (action === 'share')
+    return state.share?.daily && !state.share.daily.first_share_awarded ? '' : '首次分享奖励今日已领取'
   if (action === 'shareRewards')
     return state.share?.milestones?.some(tier => Number(tier.state) === 2) ? '' : '暂无可领取快乐值奖励'
   if (action === 'fundRewards')

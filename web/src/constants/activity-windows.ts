@@ -43,6 +43,7 @@ export const MILK_TEA_AUTOMATION_OPTIONS = [
   { key: 'mall_coupon_gift_buy', label: '自动购买点券礼包', businessOnly: false },
   { key: 'milk_tea_cashier', label: '自动领取收益', businessOnly: false },
   { key: 'milk_tea_wages', label: '自动领取工资', businessOnly: false },
+  { key: 'milk_tea_share', label: '自动分享领取首次快乐值', businessOnly: false },
   { key: 'milk_tea_share_daily', label: '自动领取每日快乐值', businessOnly: false },
   { key: 'milk_tea_share_rewards', label: '自动领取快乐值奖励', businessOnly: false },
   { key: 'milk_tea_fund_rewards', label: '自动领取成长基金奖励', businessOnly: false },

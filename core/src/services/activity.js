@@ -2643,6 +2643,24 @@ function normalizeSolarTermsClaimResult(rawBody) {
   };
 }
 
+const solarTermsV2Service = require('./activity-solar-terms').createSolarTermsService({
+  types,
+  send: sendMsgAsync,
+  assertConnected: assertActivityConnection,
+  now: () => require('../utils/utils').getServerTimeSec(),
+  mapItem: item => {
+    const itemId = toNum(item?.id);
+    const count = Math.max(0, toNum(item?.count));
+    const info = getItemById(itemId) || {};
+    return { itemId, itemCount: count, count, itemName: info.name || `物品${itemId}`, name: info.name || `物品${itemId}`, image: getItemImageById(itemId) || '' };
+  },
+});
+
+const normalizeSolarTermsV2Event = solarTermsV2Service.normalizeEvent;
+const getSolarTermsV2Info = solarTermsV2Service.getInfo;
+const answerSolarTerm = solarTermsV2Service.answer;
+const autoClaimSolarTermsQuiz = solarTermsV2Service.autoClaim;
+
 async function getSeasonPassport() {
   return normalizeSeasonInfo(await getSeasonInfoRaw());
 }
@@ -3440,7 +3458,10 @@ module.exports = {
   getSeasonPassport,
   claimSeasonPassportRewards,
   getSolarTermsInfo,
+  getSolarTermsV2Info,
   claimSolarTermsReward,
+  answerSolarTerm,
+  autoClaimSolarTermsQuiz,
   exchangeHeluShopItem,
   drawHeluGiftLotus,
   buyNanguaShopItem,
@@ -3477,3 +3498,4 @@ for (const [method, label] of Object.entries({
 module.exports.isSolarTermClaimable = isSolarTermClaimable;
 
 module.exports.normalizeSolarTermsInfo = normalizeSolarTermsInfo;
+module.exports.normalizeSolarTermsV2Event = normalizeSolarTermsV2Event;

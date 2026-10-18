@@ -99,7 +99,7 @@ const localCaptureConfig = defineModel<CaptureConfig>('localCaptureConfig', { re
             v-model="localSystemConfig.clientVersion"
             label="客户端版本"
             type="text"
-            placeholder="1.15.0.2_20261001"
+            placeholder="1.13.0.5_20260723"
             class="col-span-2"
           />
           <div class="flex flex-col gap-1.5">

@@ -10,7 +10,7 @@ function normalizeWireMaps(value) {
 }
 const WINDOW = { startTime: 1792029600, settleTime: 1794671999, endTime: 1794844799 };
 const ACTIONS = { create: [53, 'create_shop'], rename: [54, 'rename_shop'], shop: [55, 'get_shop'], hireList: [56, 'get_hire_list'], hire: [57, 'hire'], workshop: [58, 'get_workshop'], cashier: [59, 'claim_cashier'], boost: [60, 'boost'], upgrade: [61, 'upgrade'], craft: [62, 'craft'], work: [63, 'get_work_page'], wages: [64, 'claim_wages'], interact: [65, 'interact'], rank: [66, 'get_rank'], sales: [67, 'get_sales_log'], hireDisabled: [68, 'set_hire_disable'] };
-const AUTO_ACTIONS = { milk_tea_cashier: 'cashier', milk_tea_wages: 'wages', milk_tea_upgrade: 'upgrade', milk_tea_craft: 'craft', milk_tea_boost: 'boost', milk_tea_hire: 'hire', milk_tea_interact: 'interact', milk_tea_seed_buy: 'buy', milk_tea_share_daily: 'shareDaily', milk_tea_share_rewards: 'shareRewards', milk_tea_fund_rewards: 'fundRewards' };
+const AUTO_ACTIONS = { milk_tea_cashier: 'cashier', milk_tea_wages: 'wages', milk_tea_upgrade: 'upgrade', milk_tea_craft: 'craft', milk_tea_boost: 'boost', milk_tea_hire: 'hire', milk_tea_interact: 'interact', milk_tea_seed_buy: 'buy', milk_tea_share: 'share', milk_tea_share_daily: 'shareDaily', milk_tea_share_rewards: 'shareRewards', milk_tea_fund_rewards: 'fundRewards' };
 function phase(now, window = WINDOW) {
   if (![now, window.startTime, window.settleTime, window.endTime].every(Number.isFinite)
     || window.startTime <= 0 || window.settleTime < window.startTime || window.endTime < window.settleTime) return 'ended';
@@ -21,22 +21,33 @@ function compareShopGoods(a, b) {
   const group = goods => !goods.unlocked ? 3 : Number(goods.remaining) === 0 ? 2 : 1;
   return group(a) - group(b) || Number(a.order || 0) - Number(b.order || 0);
 }
-const ACTION_LABELS = { create: '开业', rename: '修改店名', hire: '雇佣员工', cashier: '领取收益', boost: '使用宣传喇叭', upgrade: '升级店铺', craft: '制作奶茶', wages: '领取工资', interact: '打工互动', hireDisabled: '设置被雇佣状态', buy: '购买商品', shareDaily: '领取每日快乐值', shareRewards: '领取快乐值奖励', fundRewards: '领取成长基金奖励' };
+const ACTION_LABELS = { create: '开业', rename: '修改店名', hire: '雇佣员工', cashier: '领取收益', boost: '使用宣传喇叭', upgrade: '升级店铺', craft: '制作奶茶', wages: '领取工资', interact: '打工互动', hireDisabled: '设置被雇佣状态', buy: '购买商品', share: '首次分享', shareDaily: '领取每日快乐值', shareRewards: '领取快乐值奖励', fundRewards: '领取成长基金奖励' };
 function normalizeHireOptions(input = {}) {
+  const primaryInput = input.primaryTalentId ?? input.talentId;
+  const backupInput = input.backupTalentId;
+  const primaryTalentId = [0, 9001, 9002, 9003, 9004].includes(Number(primaryInput)) ? Number(primaryInput) : 0;
   return {
     durationId: [1, 2, 3].includes(Number(input.durationId)) ? Number(input.durationId) : 1,
-    talentId: [0, 9001, 9002, 9003, 9004].includes(Number(input.talentId)) ? Number(input.talentId) : 0,
+    primaryTalentId,
+    backupTalentId: primaryTalentId === 0
+      ? 0
+      : ([0, 9001, 9002, 9003, 9004].includes(Number(backupInput)) ? Number(backupInput) : 0),
+    // Keep the old shape for callers outside the automation worker.
+    talentId: primaryTalentId,
   };
 }
 function selectHireCandidate(candidates, input, now) {
-  const { talentId } = normalizeHireOptions(input);
+  const { primaryTalentId, backupTalentId } = normalizeHireOptions(input);
   const idle = entry => entry?.friend?.gid && Number(entry.state) === 0
     && Number(entry.state_until_at || 0) <= now && Number(entry.rehire_available_at || 0) <= now;
   const friends = (candidates.friends || []).filter(entry => !entry.is_robot && idle(entry));
   const robots = (candidates.robots || []).filter(idle);
-  if (talentId === 9004) return robots[0];
-  return friends.find(entry => !talentId || Number(entry.talent_id) === talentId)
-    || friends[0] || robots[0];
+  const findByTalent = talentId => talentId === 9004
+    ? robots[0]
+    : talentId === 0
+      ? friends[0] || robots[0]
+      : friends.find(entry => Number(entry.talent_id) === talentId);
+  return findByTalent(primaryTalentId) || (backupTalentId !== primaryTalentId ? findByTalent(backupTalentId) : undefined);
 }
 function createMilkTeaService({ types, sendMsgAsync, getBag, getBagItems, getServerTimeSec, itemDto, getUserState = () => ({}), log = require('../utils/utils').log }) {
   const fail = message => { throw businessError('MILK_TEA_UNAVAILABLE', message); };
@@ -107,12 +118,12 @@ function createMilkTeaService({ types, sendMsgAsync, getBag, getBagItems, getSer
   }
   function getMilkTea() { if (!pendingRead) pendingRead = read().finally(() => { pendingRead = null; }); return pendingRead; }
   async function mutate(action, input = {}) {
-    if (!ACTIONS[action] && !['buy', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action)) fail('活动操作无效');
+    if (!ACTIONS[action] && !['buy', 'share', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action)) fail('活动操作无效');
     const state = await getMilkTea(); const inventory = await bag(); const now = getServerTimeSec();
     state.phase = phase(now, state);
     if (!['business', 'settling'].includes(state.phase)) fail('活动未开始或已结束');
-    if (state.phase !== 'business' && !['cashier', 'wages', 'buy', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action)) fail('结算期不支持此操作');
-    if (!['create', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action) && !Number(state.summary.shop_open_at)) fail('请先开业');
+    if (state.phase !== 'business' && !['cashier', 'wages', 'buy', 'share', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action)) fail('结算期不支持此操作');
+    if (!['create', 'share', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action) && !Number(state.summary.shop_open_at)) fail('请先开业');
     let params = {};
     let detail = {};
     if (action === 'create' || action === 'rename') {
@@ -124,7 +135,11 @@ function createMilkTeaService({ types, sendMsgAsync, getBag, getBagItems, getSer
     if (action === 'cashier' && !list(state.shop.pending_rewards).some(x => BigInt(x.count) > 0n)) fail('暂无可领取收益');
     if (action === 'wages' && !state.summary.has_unclaimed_wage) fail('暂无可领取工资');
     if (action === 'upgrade' && (!state.summary.can_upgrade || BigInt(state.shop.total_revenue) < BigInt(state.shop.next_level_revenue) || !Number(state.shop.next_level_revenue))) fail('营业额未达到升级要求');
-    if (action === 'boost') { if (!available([{ id: state.shop.sales_item_id, count: '1' }], inventory)) fail('宣传喇叭不足'); params = { count: 1 }; }
+    if (action === 'boost') {
+      const count = Number(input.count ?? 1);
+      if (!Number.isSafeInteger(count) || count < 1 || !available([{ id: state.shop.sales_item_id, count: '1' }], inventory, count)) fail('宣传喇叭数量不足');
+      params = { count };
+    }
     if (action === 'craft') {
       const eligible = new Set(state.recipes.filter(x => x.unlocked && x.is_advanced).map(x => x.config?.fruit_item_id?.split(':')[0]));
       const fruits = inventory.filter(x => eligible.has(String(x.id)) && BigInt(String(x.count || 0)) > 0n && Number(x.uid) > 0);
@@ -142,7 +157,8 @@ function createMilkTeaService({ types, sendMsgAsync, getBag, getBagItems, getSer
           : [...list(candidates.friends), ...list(candidates.robots)].find(x => x.friend.gid === String(input.targetGid) && Number(x.state) === 0);
       if (!target && input.autoSelect === true) return { ok: true, skipped: true, reason: '没有符合策略的空闲员工' };
       if (!target || !available([{ id: '1041', count: candidates.wage_total }], inventory)) fail('没有可雇佣员工或奶茶券不足');
-      detail = { employeeName: String(target.friend.name || '').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 60), slotIndex: slot, durationId: duration.duration_id, hours: duration.duration_sec / 3600, talentId: Number(target.talent_id), employeeType: target.is_robot ? '实习员工' : '好友', fallbackUsed: input.autoSelect === true && Number(input.talentId || 0) !== 0 && Number(target.talent_id) !== Number(input.talentId), wage: String(candidates.wage_total) };
+      const hireOptions = normalizeHireOptions(input);
+      detail = { employeeName: String(target.friend.name || '').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 60), slotIndex: slot, durationId: duration.duration_id, hours: duration.duration_sec / 3600, talentId: Number(target.talent_id), employeeType: target.is_robot ? '实习员工' : '好友', fallbackUsed: input.autoSelect === true && hireOptions.primaryTalentId !== 0 && Number(target.talent_id) !== hireOptions.primaryTalentId, wage: String(candidates.wage_total) };
       params = { hires: [{ slot_index: slot, duration_id: duration.duration_id, target_gid: target.friend.gid }] };
     }
     if (action === 'interact') {
@@ -151,8 +167,14 @@ function createMilkTeaService({ types, sendMsgAsync, getBag, getBagItems, getSer
     }
     if (action === 'rank' || action === 'sales' || action === 'hireList' || action === 'shop' || action === 'work' || action === 'workshop') fail('只读动作请使用查询接口');
     if (action === 'hireDisabled') params = { hire_disabled: input.disabled === true };
-    if (['shareDaily', 'shareRewards', 'fundRewards'].includes(action)) {
-      const cmd = action === 'shareDaily' ? 74 : action === 'shareRewards' ? 71 : 76;
+    if (['share', 'shareDaily', 'shareRewards', 'fundRewards'].includes(action)) {
+      const cmd = action === 'share' ? 70 : action === 'shareDaily' ? 74 : action === 'shareRewards' ? 71 : 76;
+      if (action === 'share') {
+        if (state.share?.daily?.first_share_awarded) fail('首次分享奖励今日已领取');
+        const request = types.ActivityOperateRequest.create({ id: '2026110104', cmd, share_reward_share: {} });
+        const reply = await rpc('Operate', types.ActivityOperateRequest, types.ActivityOperateReply, request);
+        if (reply.id !== '2026110104' || Number(reply.cmd) !== cmd) fail('分享响应不匹配');
+      } else {
       if (action === 'shareDaily' && (!state.share?.daily || state.share.daily.daily_reward_claimed)) fail('今日已领取');
       if (action === 'shareRewards' && !state.share?.milestones?.some(x => Number(x.state) === 2)) fail('暂无可领取档位');
       if (action === 'fundRewards') {
@@ -162,6 +184,7 @@ function createMilkTeaService({ types, sendMsgAsync, getBag, getBagItems, getSer
       const id = action === 'fundRewards' ? '2026110103' : '2026110104';
       const reply = await rpc('Operate', types.MilkTeaOperateRequest, types.MilkTeaOperateReply, { id, cmd });
       if (reply.id !== id || Number(reply.cmd) !== cmd) fail('活动响应不匹配');
+      }
     } else if (action === 'buy') {
       const goods = state.goods.find(x => x.id === String(input.goodsId)); const count = Number(input.count ?? 1);
       if (!goods || !Number.isSafeInteger(count) || count < 1 || count > goods.remaining || !goods.unlocked || goods.paid || !available(goods.cost, inventory, count)) fail('商品未解锁、限购已用完或资源不足（不支持钻石购买）');

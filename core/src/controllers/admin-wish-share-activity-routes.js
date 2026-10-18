@@ -6,7 +6,26 @@ function registerAdminWishShareActivityRoutes({ app, provider, getAccountIdFromR
     if (!accountId) return;
     try {
       if (!requireConnectedAccount(res, provider, accountId, '账号未运行')) return;
-      res.json({ ok: true, solarTerms: await provider.getSolarTermsInfo(accountId) });
+      let solarTerms;
+      if (typeof provider.getSolarTermsV2Info !== 'function') solarTerms = await provider.getSolarTermsInfo(accountId);
+      else {
+        try { solarTerms = await provider.getSolarTermsV2Info(accountId); }
+        catch (error) {
+          solarTerms = { ...await provider.getSolarTermsInfo(accountId), warning: `新版答题状态读取失败：${error.message}` };
+        }
+      }
+      res.json({ ok: true, solarTerms });
+    } catch (error) { sendProviderError(res, error); }
+  });
+  app.post('/api/activity/solar-terms/answer', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, { getAccountIdFromRequest, canAccessAccount });
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '节令答题失败: 账号未运行')) return;
+      const { termId, optionIndex } = req.body || {};
+      if (!Number.isSafeInteger(termId) || termId <= 0 || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > 3)
+        return res.status(400).json({ ok: false, error: '节令答题参数无效' });
+      res.json(await provider.answerSolarTerm(accountId, termId, optionIndex));
     } catch (error) { sendProviderError(res, error); }
   });
   app.post('/api/activity/solar-terms/claim', async (req, res) => {
@@ -14,7 +33,12 @@ function registerAdminWishShareActivityRoutes({ app, provider, getAccountIdFromR
     if (!accountId) return;
     try {
       if (!requireConnectedAccount(res, provider, accountId, '账号未运行')) return;
-      res.json(await provider.claimSolarTermsReward(accountId, Number(req.body?.termId) || 0));
+      const result = await provider.claimSolarTermsReward(accountId, Number(req.body?.termId) || 0);
+      if (typeof provider.getSolarTermsV2Info === 'function') {
+        try { result.solarTerms = await provider.getSolarTermsV2Info(accountId); }
+        catch (error) { result.refreshWarning = `基础赠礼已领取，新版状态刷新失败：${error.message}`; }
+      }
+      res.json(result);
     } catch (error) { sendProviderError(res, error); }
   });
   app.get('/api/activity/milk-tea', async (req, res) => {

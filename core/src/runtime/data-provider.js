@@ -294,7 +294,9 @@ function createDataProvider(deps) {
         drawHeluGiftLotus: (ref, options) => callWorkerApi(resolveAccountId(ref), 'drawHeluGiftLotus', options || {}),
         claimSeasonPassportRewards: (ref) => callWorkerApi(resolveAccountId(ref), 'claimSeasonPassportRewards'),
         getSolarTermsInfo: (ref) => callWorkerApi(resolveAccountId(ref), 'getSolarTermsInfo'),
+        getSolarTermsV2Info: (ref) => callWorkerApi(resolveAccountId(ref), 'getSolarTermsV2Info'),
         claimSolarTermsReward: (ref, termId) => callWorkerApi(resolveAccountId(ref), 'claimSolarTermsReward', termId),
+        answerSolarTerm: (ref, termId, optionIndex) => callWorkerApi(resolveAccountId(ref), 'answerSolarTerm', termId, optionIndex),
         claimQingmeiSeeds: (ref) => callWorkerApi(resolveAccountId(ref), 'claimQingmeiSeeds'),
         brewAndSellQingmeiWine: (ref, options) => callWorkerApi(resolveAccountId(ref), 'brewAndSellQingmeiWine', options || {}),
 

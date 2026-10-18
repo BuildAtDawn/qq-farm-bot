@@ -3,7 +3,7 @@ import type { TeaRecipe, TeaState } from '@/utils/milk-tea'
 import { computed } from 'vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
 import { MILK_TEA_AUTOMATION_OPTIONS } from '@/constants/activity-windows'
-import { teaBalance, teaCanUpgrade, teaDate, teaDuration, teaFruitUids, teaImage, teaInteger, teaInventoryEstimate, teaNumber, teaOpenSlots, teaPhase } from '@/utils/milk-tea'
+import { teaBalance, teaCanUpgrade, teaCountdown, teaDate, teaDuration, teaFruitUids, teaImage, teaInteger, teaInventoryEstimate, teaNumber, teaOpenSlots, teaPhase } from '@/utils/milk-tea'
 import MilkTeaAutomationStatus from './MilkTeaAutomationStatus.vue'
 import MilkTeaRewardIcon from './MilkTeaRewardIcon.vue'
 
@@ -26,10 +26,6 @@ const progress = computed(() => {
   const target = teaInteger(shop.value?.next_level_revenue)
   return target > 0n ? Math.min(100, Number(teaInteger(shop.value?.total_revenue) * 1000n / target) / 10) : 100
 })
-const gap = computed(() => {
-  const value = teaInteger(shop.value?.next_level_revenue) - teaInteger(shop.value?.total_revenue)
-  return value > 0n ? value.toString() : '0'
-})
 const pending = computed(() => shop.value?.pending_rewards || [])
 const hasPending = computed(() => pending.value.some(item => teaInteger(item.count) > 0n))
 const primaryPending = computed(() => pending.value.find(item => String(item.id ?? item.itemId) === '1041'))
@@ -39,6 +35,7 @@ const allRecipes = computed(() => [...(props.state.recipes || [])].sort((a, b) =
   || Number(b.recipe_id) - Number(a.recipe_id)))
 const inventory = computed(() => allRecipes.value.filter(recipe => recipe.unlocked && recipe.is_advanced))
 const estimate = computed(() => teaInventoryEstimate(props.state, props.now))
+const estimateRemaining = computed(() => estimate.value.until ? Math.max(0, estimate.value.until - props.now) : null)
 const activeSlots = computed(() => (shop.value?.slots || []).filter(slot => Number(slot.end_at) > props.now))
 const automationOptions = computed(() => MILK_TEA_AUTOMATION_OPTIONS.filter(option => !option.businessOnly || business.value))
 const enabledCount = computed(() => automationOptions.value.filter(option => props.automation?.[option.key]).length)
@@ -49,6 +46,40 @@ function materialCount(recipe: TeaRecipe) {
 </script>
 
 <template>
+  <section class="tea-growth-summary" aria-label="店铺成长">
+    <img class="tea-growth-art" :src="teaImage('img_s4TeaUpLv_house')" alt="">
+    <div class="tea-growth-summary-main">
+      <div class="tea-growth-summary-heading">
+        <div>
+          <span class="tea-growth-kicker">店铺成长</span>
+          <strong class="tea-number"><small>Lv.</small>{{ shop.level }}</strong>
+          <span class="tea-growth-next">{{ next ? `下一等级 Lv.${next.level}` : '已满级' }}</span>
+        </div>
+        <div class="tea-growth-summary-actions">
+          <button type="button" class="tea-link" :disabled="blocked" @click="emit('open', 'levels')">
+            等级预览<span class="i-carbon-arrow-up-right" aria-hidden="true" />
+          </button>
+          <button v-if="next" type="button" class="tea-button tea-button--growth" :disabled="blocked || !teaCanUpgrade(state, now)" @click="emit('open', 'upgrade')">
+            {{ teaCanUpgrade(state, now) ? '升级店铺' : `还差 ${teaNumber(teaInteger(shop.next_level_revenue) - teaInteger(shop.total_revenue))} 营业额` }}
+          </button>
+        </div>
+      </div>
+      <div class="tea-growth-progress">
+        <div class="tea-progress-label">
+          <span>营业额进度</span><span class="tea-number">{{ teaNumber(shop.total_revenue) }} / {{ next ? teaNumber(shop.next_level_revenue) : '已满级' }}</span>
+        </div>
+        <progress :value="progress" max="100" aria-label="店铺升级进度" />
+      </div>
+      <p v-if="next" class="tea-next-unlock">
+        {{ (next.recipe_names || []).filter(name => !(current?.recipe_names || []).includes(name)).join('、') }}<span v-if="next.employee_slot_count > (current?.employee_slot_count || 0)"> · 员工位 {{ next.employee_slot_count }} 个</span><span v-if="next.shop_item_string"> · {{ next.shop_item_string }}</span>
+      </p>
+    </div>
+    <button type="button" class="tea-growth-boost" :disabled="blocked || !business || teaInteger(teaBalance(state, shop.sales_item_id)) < 1n" @click="emit('open', 'boost')">
+      <img :src="teaImage('icon_s4_boost')" alt="">
+      <span><b>宣传喇叭</b><small>{{ teaNumber(teaBalance(state, shop.sales_item_id)) }} 个 · 使用</small></span>
+      <span class="i-carbon-arrow-right" aria-hidden="true" />
+    </button>
+  </section>
   <div class="tea-metrics">
     <div class="tea-metric">
       <img :src="teaImage('icon_s4_ticket')" alt=""><p>可用奶茶券</p><strong class="tea-number">{{ teaNumber(teaBalance(state, '1041')) }}</strong><small>活动兑换货币</small>
@@ -60,7 +91,7 @@ function materialCount(recipe: TeaRecipe) {
       <p>库存预估券收益</p><strong class="tea-number">{{ teaNumber(estimate.tokens) }}<small>券</small></strong><small>仅计已制作的高级奶茶</small>
     </div>
     <div class="tea-metric">
-      <p>高级库存预计支撑至</p><strong class="tea-stock-until">{{ estimate.cups === '0' ? '等待补货' : estimate.until ? teaDate(estimate.until) : '暂不可估算' }}</strong><small>当前 {{ teaNumber(shop.effective_cups_per_hour) }} 杯 / 小时 · {{ business ? '营业中' : '结算期' }}</small>
+      <p>高级库存预计支撑至</p><strong class="tea-stock-until">{{ estimate.cups === '0' ? '等待补货' : estimateRemaining !== null ? teaCountdown(estimateRemaining) : '暂不可估算' }}</strong><small>当前 {{ teaNumber(shop.effective_cups_per_hour) }} 杯 / 小时 · {{ business ? '营业中' : '结算期' }}</small>
     </div>
   </div>
   <div class="tea-shop-columns">
@@ -116,34 +147,12 @@ function materialCount(recipe: TeaRecipe) {
         收益按当前售价估算；支撑时间为高级总库存 ÷ 当前总销售速度，不代表各款实际售罄顺序，不含补货、喇叭及员工变动。{{ estimate.capped ? '库存可能无法在营业截止前售完。' : '' }}
       </p>
       <div class="tea-actions">
-        <button type="button" class="tea-link" :disabled="blocked || !business || teaInteger(teaBalance(state, shop.sales_item_id)) < 1n" @click="emit('open', 'boost')">
-          宣传喇叭 {{ teaNumber(teaBalance(state, shop.sales_item_id)) }} 个 · 使用
-        </button><button type="button" class="tea-link" :disabled="blocked" @click="emit('open', 'automation')">
+        <button type="button" class="tea-link" :disabled="blocked" @click="emit('open', 'automation')">
           账号设置 / 自动化状态
         </button>
       </div>
     </div>
     <aside class="tea-rail">
-      <section class="tea-rail-section">
-        <header class="tea-heading">
-          <h3>店铺成长</h3><button type="button" class="tea-link" :disabled="blocked" @click="emit('open', 'levels')">
-            等级预览<span class="i-carbon-arrow-up-right" aria-hidden="true" />
-          </button>
-        </header>
-        <div class="tea-level">
-          <img :src="teaImage('img_s4TeaUpLv_house')" alt=""><strong class="tea-number"><small>Lv.</small>{{ shop.level }}</strong><span>{{ next ? `下一等级 Lv.${next.level}` : '已满级' }}</span>
-        </div>
-        <div class="tea-progress-label">
-          <span>营业额进度</span><span class="tea-number">{{ teaNumber(shop.total_revenue) }} / {{ next ? teaNumber(shop.next_level_revenue) : '已满级' }}</span>
-        </div>
-        <progress :value="progress" max="100" aria-label="店铺升级进度" />
-        <p v-if="next" class="tea-next-unlock">
-          {{ (next.recipe_names || []).filter(name => !(current?.recipe_names || []).includes(name)).join('、') }}<span v-if="next.employee_slot_count > (current?.employee_slot_count || 0)"> · 员工位 {{ next.employee_slot_count }} 个</span><span v-if="next.shop_item_string"> · {{ next.shop_item_string }}</span>
-        </p>
-        <button type="button" class="tea-button" :disabled="blocked || !teaCanUpgrade(state, now)" @click="emit('open', 'upgrade')">
-          {{ !next ? '店铺已满级' : teaCanUpgrade(state, now) ? '升级店铺' : `还差 ${teaNumber(gap)} 营业额` }}
-        </button>
-      </section>
       <section class="tea-rail-section">
         <header class="tea-heading">
           <h3>店员</h3><small>{{ activeSlots.length }} / {{ current?.employee_slot_count ?? '—' }} 在岗</small>

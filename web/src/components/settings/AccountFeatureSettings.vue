@@ -7,7 +7,9 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
+import { FERTILIZER_TIME_UNITS, fertilizerTimeSeconds, fertilizerTimeValue, type FertilizerTimeUnit } from '@/utils/fertilizer-time'
 import { useMutationResource } from '@/composables/useMutationResource'
+import { isSolarQuizActive } from '@/constants/solar-terms'
 import { CHARITY_FLOWER_ACTIVITY_WINDOW, isWithinActivityWindowMs, MILK_TEA_ACTIVITY_WINDOW, MILK_TEA_AUTOMATION_OPTIONS, MILK_TEA_BUSINESS_WINDOW, PET_DIARY_ACTIVITY_WINDOW, RAIN_POEM_ACTIVITY_WINDOW, SHARE_REWARD_ACTIVITY_WINDOW, WISH_SIGN_ACTIVITY_WINDOW } from '@/constants/activity-windows'
 
 type ModuleKey = 'planting' | 'fertilizer' | 'friends' | 'steal' | 'merchant' | 'activity'
@@ -41,6 +43,7 @@ const qixiFriends = ref<Array<{ gid: number, name: string }>>([])
 const SHOW_STAR_ACTIVITY = false
 const SHOW_QIXI_ACTIVITY = false
 const nowMs = ref(Date.now())
+const showSolarQuiz = computed(() => isSolarQuizActive(nowMs.value))
 let nowTimer: ReturnType<typeof window.setInterval> | null = null
 const showMilkTeaActivity = computed(() => isWithinActivityWindowMs(MILK_TEA_ACTIVITY_WINDOW, nowMs.value))
 const showMilkTeaBusiness = computed(() => isWithinActivityWindowMs(MILK_TEA_BUSINESS_WINDOW, nowMs.value))
@@ -50,6 +53,11 @@ const showCharityFlowerActivity = computed(() => isWithinActivityWindowMs(CHARIT
 const showPetDiaryActivity = computed(() => isWithinActivityWindowMs(PET_DIARY_ACTIVITY_WINDOW, nowMs.value))
 const showWishSignActivity = computed(() => isWithinActivityWindowMs(WISH_SIGN_ACTIVITY_WINDOW, nowMs.value))
 const showShareRewardActivity = computed(() => isWithinActivityWindowMs(SHARE_REWARD_ACTIVITY_WINDOW, nowMs.value))
+const fertilizerSmartUnit = ref<FertilizerTimeUnit>('seconds')
+const fertilizerSmartValue = computed({
+  get: () => fertilizerTimeValue(automation.value.automation.fertilizer_smart_seconds ?? 300, fertilizerSmartUnit.value),
+  set: (value: number) => { automation.value.automation.fertilizer_smart_seconds = fertilizerTimeSeconds(value, fertilizerSmartUnit.value) },
+})
 
 const moduleInfo: Record<ModuleKey, { title: string, description: string, icon: string, image: string, tone: string }> = {
   planting: { title: '种植与收获', description: '选种、收获、出售和巡田节奏', icon: 'i-carbon-sprout', image: '/game-config/module_icons/planting.png', tone: 'emerald' },
@@ -66,6 +74,7 @@ const selectedLandNames = computed(() => props.fertilizerLandTypeOptions.filter(
 const selectedLandTypeCount = computed(() => Array.isArray(automation.value.automation.fertilizer_land_types) ? automation.value.automation.fertilizer_land_types.length : 0)
 const activityKeys = computed(() => [
   'star_solar_claim',
+  ...(showSolarQuiz.value ? ['star_solar_quiz_claim'] : []),
   ...(showMilkTeaActivity.value ? milkTeaSettings.value.map(setting => setting.key) : []),
   ...(showRainPoemActivity.value
     ? ['rain_poem_bottle_buy', 'rain_poem_weather_collect', 'rain_poem_summon_use', 'rain_poem_prank_use', 'rain_poem_research_unlock']
@@ -156,7 +165,7 @@ function summaryTags(key: ModuleKey) {
   return [
     automation.value.automation.task ? '自动完成日常任务' : '不做日常',
     automation.value.automation.task_after_farm && '种植收获后巡查任务',
-    automation.value.automation.star_solar_claim && '节令小札',
+    (automation.value.automation.star_solar_claim || (showSolarQuiz.value && automation.value.automation.star_solar_quiz_claim)) && '节令小札',
     showMilkTeaActivity.value && milkTeaSettings.value.some(setting => automation.value.automation[setting.key]) && '奶茶热销中',
     SHOW_STAR_ACTIVITY && starFestivalEnabled.value && '心许千灯星垂野',
     SHOW_QIXI_ACTIVITY && qixiActivityEnabled.value && '鹊桥寄情',
@@ -491,7 +500,10 @@ watch(() => props.currentAccountId, loadQixiFriends)
               <section class="border border-gray-100 rounded-lg p-4 space-y-3 dark:border-gray-700">
                 <div class="grid gap-3 sm:grid-cols-2">
                   <BaseSelect v-model="automation.automation.fertilizer" label="施肥策略" :options="fertilizerOptions" />
-                  <BaseInput v-if="['smart', 'smart_only', 'smart_normal'].includes(automation.automation.fertilizer)" v-model.number="automation.automation.fertilizer_smart_seconds" label="快成熟判定秒数" type="number" min="30" max="3600" />
+                  <div v-if="['smart', 'smart_only', 'smart_normal'].includes(automation.automation.fertilizer)" class="flex items-end gap-2">
+                    <BaseInput v-model.number="fertilizerSmartValue" label="快成熟判定" type="number" min="1" max="7200" step="0.5" class="flex-1" />
+                    <BaseSelect v-model="fertilizerSmartUnit" label="单位" :options="FERTILIZER_TIME_UNITS" class="w-32" />
+                  </div>
                 </div>
                 <BaseSwitch v-model="automation.automation.fertilizer_2x2_ripen" label="2x2催熟" :disabled="mutationTestActive" />
                 <BaseSwitch v-model="automation.automation.fertilizer_multi_season" label="多季补肥" />
@@ -592,7 +604,8 @@ watch(() => props.currentAccountId, loadQixiFriends)
                 <h3 class="text-sm font-medium">
                   节令小札
                 </h3>
-                <BaseSwitch v-model="automation.automation.star_solar_claim" label="自动领取节令奖励" />
+                <BaseSwitch v-model="automation.automation.star_solar_claim" label="自动领取节令小礼" />
+                <BaseSwitch v-if="showSolarQuiz" v-model="automation.automation.star_solar_quiz_claim" label="自动领取答题附加奖励" />
               </section>
 
               <section v-if="SHOW_STAR_ACTIVITY" class="border border-gray-100 rounded-lg p-4 space-y-3 dark:border-gray-700">
@@ -745,8 +758,14 @@ watch(() => props.currentAccountId, loadQixiFriends)
                     ]"
                   />
                   <BaseSelect
-                    v-model="automation.automation.milk_tea_hire_talent" label="雇佣类型" :options="[
-                      { label: '任意好友', value: 0 }, { label: '金牌销售', value: 9001 }, { label: '金牌宣传', value: 9002 },
+                    v-model="automation.automation.milk_tea_hire_primary_talent" label="首选优先级" :options="[
+                      { label: '随机雇佣', value: 0 }, { label: '金牌销售', value: 9001 }, { label: '金牌宣传', value: 9002 },
+                      { label: '金牌服务', value: 9003 }, { label: '实习员工', value: 9004 },
+                    ]"
+                  />
+                  <BaseSelect
+                    v-model="automation.automation.milk_tea_hire_backup_talent" label="备用优先级" :disabled="automation.automation.milk_tea_hire_primary_talent === 0" :options="[
+                      { label: '随机雇佣', value: 0 }, { label: '金牌销售', value: 9001 }, { label: '金牌宣传', value: 9002 },
                       { label: '金牌服务', value: 9003 }, { label: '实习员工', value: 9004 },
                     ]"
                   />

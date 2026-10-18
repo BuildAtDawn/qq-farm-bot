@@ -262,7 +262,8 @@ async function runFarmOperationInternal(opType) {
   if (opType === 'all') {
     const fertilizerMode = getAutomation().fertilizer || 'none';
     if (fertilizerMode === 'smart' || fertilizerMode === 'smart_only' || fertilizerMode === 'smart_normal' ||
-        fertilizerMode === 'final_normal' || fertilizerMode === 'final_organic' || isAutomationOn('fertilizer_2x2_ripen')) {
+        fertilizerMode === 'first_normal_final_organic' || fertilizerMode === 'final_normal' ||
+        fertilizerMode === 'final_organic' || isAutomationOn('fertilizer_2x2_ripen')) {
       try {
         const fertResult = await runFertilizerByConfig([], { skipNormal: true });
         if (fertResult.organic > 0) actions.push(`有机肥${  fertResult.organic}`);

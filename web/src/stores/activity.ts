@@ -89,9 +89,22 @@ export interface HeluSolarTerm {
   startTime: number
   endTime: number
   rewards: HeluDrawReward[]
+  questionRewards?: HeluDrawReward[]
+  question?: string
+  options?: string[]
+  answerAvailable?: boolean
+  answerable?: boolean
+  answerStatus?: string
+  correctOptionIndex?: number | null
+  explanation?: string
+  directClaimed?: boolean
+  quizClaimed?: boolean
+  quizWrongToday?: boolean
+  wrongOptions?: number[]
 }
 
 export interface HeluSolarTerms {
+  version?: 'v2'
   nowTime?: number
   terms: HeluSolarTerm[]
   claimableCount: number

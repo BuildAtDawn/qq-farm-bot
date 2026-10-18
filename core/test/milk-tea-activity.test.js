@@ -9,7 +9,14 @@ const root = new protobuf.Root().loadSync(path.join(__dirname, '../src/proto/mil
 const type = name => root.lookupType(`gamepb.activitypb.${name}`);
 const vectors = require('../src/activity-data/milk-tea-protocol-vectors.json');
 const fixtures = require('../src/activity-data/milk-tea-response-fixtures.json');
-const types = Object.fromEntries(['MilkTeaOperateRequest', 'MilkTeaOperateReply', 'MilkTeaGetGroupReply', 'GetGroupRequest'].map(name => [name === 'GetGroupRequest' ? 'ActivityGetGroupRequest' : name, type(name)]));
+const types = Object.fromEntries([
+  ['MilkTeaOperateRequest', 'MilkTeaOperateRequest'],
+  ['MilkTeaOperateReply', 'MilkTeaOperateReply'],
+  ['ActivityOperateRequest', 'OperateRequest'],
+  ['ActivityOperateReply', 'OperateReply'],
+  ['ActivityGetGroupRequest', 'GetGroupRequest'],
+  ['MilkTeaGetGroupReply', 'MilkTeaGetGroupReply'],
+].map(([key, name]) => [key, type(name)]));
 test('official encoder fixed vectors retain every command, selector and nested parameter', () => {
   for (const vector of vectors) {
     const T = type('MilkTeaOperateRequest');
@@ -18,6 +25,11 @@ test('official encoder fixed vectors retain every command, selector and nested p
     assert.equal(reply.id, '2026110101');
     assert.equal(Number(reply.cmd), vector.request.cmd);
   }
+});
+test('first share request keeps the shared activity field and command envelope', () => {
+  const T = type('OperateRequest');
+  const encoded = Buffer.from(T.encode(T.fromObject({ id: '2026110104', cmd: 70, share_reward_share: {} })).finish()).toString('hex');
+  assert.equal(encoded, '0898f98fc6071046ca0900');
 });
 test('recorded shop and workshop preserve map keys, stock, employee and prices', () => {
   const T = types.MilkTeaOperateReply; const data = normalizeWireMaps(T.toObject(T.decode(T.encode(T.fromObject(fixtures[282])).finish()), { longs: String }));
@@ -56,8 +68,14 @@ function setup({ now = WINDOW.startTime + 100, diamond = false, unlocked = true,
   );
   const service = createMilkTeaService({ log: (...args) => logs.push(args), types, getServerTimeSec: () => now, getUserState: () => account, log: (...args) => logs.push(args), getBag: async () => inventory, getBagItems: x => x, itemDto: x => ({ ...x, name: '夹具物品' }), sendMsgAsync: async (_, method, bytes) => {
     if (method === 'GetGroup') return { body: types.MilkTeaGetGroupReply.encode(types.MilkTeaGetGroupReply.fromObject(group)).finish() };
-    const req = types.MilkTeaOperateRequest.toObject(types.MilkTeaOperateRequest.decode(bytes), { longs: String });calls.push(req);
-    const fixture = Number(req.cmd) === 56 && hireList ? { id: req.id, cmd: req.cmd, milk_tea_get_hire_list: hireList } : Number(req.cmd) === 65 ? { id: req.id, cmd: req.cmd, milk_tea_interact: {} } : Number(req.cmd) === 57 ? { id: req.id, cmd: req.cmd, milk_tea_hire: { results: [{ success: hireSuccess }] } } : Number(req.cmd) === 55 ? fixtures[282] : Number(req.cmd) === 58 ? fixtures[283] : Number(req.cmd) === 63 ? (workPage ? { id: req.id, cmd: req.cmd, milk_tea_get_work_page: workPage } : fixtures[206]) : Number(req.cmd) === 67 && salesLog ? { id: req.id, cmd: req.cmd, milk_tea_get_sales_log: salesLog } : { id: req.id, cmd: req.cmd };
+    const isShare = Buffer.from(bytes).includes(Buffer.from([0xca, 0x09]));
+    const req = method === 'Operate' && !isShare
+      ? types.MilkTeaOperateRequest.toObject(types.MilkTeaOperateRequest.decode(bytes), { longs: String })
+      : types.ActivityOperateRequest.toObject(types.ActivityOperateRequest.decode(bytes), { longs: String });calls.push(req);
+    if (req.share_reward_share) {
+      return { body: types.ActivityOperateReply.encode(types.ActivityOperateReply.fromObject({ id: req.id, cmd: req.cmd, share_reward_share: { granted_score: 5 } })).finish() };
+    }
+    const fixture = Number(req.cmd) === 56 && hireList ? { id: req.id, cmd: req.cmd, milk_tea_get_hire_list: hireList } : Number(req.cmd) === 65 ? { id: req.id, cmd: req.cmd, milk_tea_interact: {} } : Number(req.cmd) === 57 ? { id: req.id, cmd: req.cmd, milk_tea_hire: { results: [{ success: hireSuccess }] } } : Number(req.cmd) === 60 ? { id: req.id, cmd: req.cmd, milk_tea_boost: {} } : Number(req.cmd) === 55 ? fixtures[282] : Number(req.cmd) === 58 ? fixtures[283] : Number(req.cmd) === 63 ? (workPage ? { id: req.id, cmd: req.cmd, milk_tea_get_work_page: workPage } : fixtures[206]) : Number(req.cmd) === 67 && salesLog ? { id: req.id, cmd: req.cmd, milk_tea_get_sales_log: salesLog } : { id: req.id, cmd: req.cmd };
     const response = hireList && Number(req.cmd) === 55 ? { ...fixture, milk_tea_get_shop: { shop: { ...fixture.milk_tea_get_shop.shop, slots: [] } } } : fixture;
     return { body: types.MilkTeaOperateReply.encode(types.MilkTeaOperateReply.fromObject(response)).finish() };
   } });return { service, calls, logs };
@@ -117,6 +135,21 @@ test('manual shop purchase uses the same checked mutation envelope', async () =>
   assert.equal(request.id, '2026110102');
   assert.deepEqual(request.shop_buy, { goods_id: '301', count: '2' });
   await assert.rejects(service.operateMilkTea('buy', { goodsId: 301, count: 109 }), /商品未解锁/);
+});
+test('boost accepts a quantity capped by the remaining inventory', async () => {
+  const { service, calls } = setup({ inventory: [{ id: 1042, count: 4 }] });
+  await service.operateMilkTea('boost', { count: 3 });
+  const request = calls.find(x => Number(x.cmd) === 60);
+  assert.deepEqual(request.milk_tea_boost, { count: 3 });
+  await assert.rejects(service.operateMilkTea('boost', { count: 5 }), /宣传喇叭数量不足/);
+});
+test('milk tea first share uses the official share reward operation envelope', async () => {
+  const { service, calls } = setup({ panels: true });
+  const result = await service.operateMilkTea('share');
+  assert.equal(result.ok, true);
+  const request = calls.find(x => x.share_reward_share);
+  assert.equal(request.id, '2026110104');
+  assert.equal(request.cmd, '70');
 });
 
 test('web references resolve to local assets', () => {
@@ -267,25 +300,25 @@ test('batch shop quantity matches latest official encoder reconstruction', () =>
 
 const { selectHireCandidate, normalizeHireOptions } = require('../src/services/activity-milk-tea');
 const employee = (gid, talent, extra = {}) => ({ friend: { gid: String(gid) }, talent_id: talent, state: 0, ...extra });
-test('hire chooses first matching idle friend, then other idle friends, then interns', () => {
+test('hire applies primary then backup priority and skips when both are unavailable', () => {
   const other = employee(1, 9002), matching = employee(2, 9001), robot = employee(3, 9004, { is_robot: true });
   const candidates = { friends: [employee(4, 9001, { state: 1 }), other, matching, employee(5, 9001)], robots: [robot] };
-  assert.equal(selectHireCandidate(candidates, { talentId: 9001 }, 100), matching);
-  assert.equal(selectHireCandidate(candidates, { talentId: 9003 }, 100), other);
-  assert.equal(selectHireCandidate(candidates, { talentId: 0 }, 100), other);
-  assert.equal(selectHireCandidate(candidates, { talentId: 9004 }, 100), robot);
+  assert.equal(selectHireCandidate(candidates, { primaryTalentId: 9001, backupTalentId: 9002 }, 100), matching);
+  assert.equal(selectHireCandidate(candidates, { primaryTalentId: 9003, backupTalentId: 9002 }, 100), other);
+  assert.equal(selectHireCandidate(candidates, { primaryTalentId: 0, backupTalentId: 9001 }, 100), other);
+  assert.equal(selectHireCandidate(candidates, { primaryTalentId: 9004, backupTalentId: 9002 }, 100), robot);
   candidates.friends = [employee(6, 9001, { rehire_available_at: 101 }), employee(7, 9001, { state_until_at: 101 }), employee(8, 9001, { state: 2 })];
-  assert.equal(selectHireCandidate(candidates, { talentId: 9001 }, 100), robot);
+  assert.equal(selectHireCandidate(candidates, { primaryTalentId: 9001, backupTalentId: 9002 }, 100), undefined);
   candidates.robots[0].state = 1;
-  assert.equal(selectHireCandidate(candidates, { talentId: 9001 }, 100), undefined);
+  assert.equal(selectHireCandidate(candidates, { primaryTalentId: 9001, backupTalentId: 9002 }, 100), undefined);
   assert.equal(selectHireCandidate({}, {}, 100), undefined);
-  assert.deepEqual(normalizeHireOptions({ durationId: 'bad', talentId: 123 }), { durationId: 1, talentId: 0 });
-  assert.deepEqual(normalizeHireOptions({ durationId: '3', talentId: '9001' }), { durationId: 3, talentId: 9001 });
+  assert.deepEqual(normalizeHireOptions({ durationId: 'bad', primaryTalentId: 123, backupTalentId: 9002 }), { durationId: 1, primaryTalentId: 0, backupTalentId: 0, talentId: 0 });
+  assert.deepEqual(normalizeHireOptions({ durationId: '3', primaryTalentId: '9001', backupTalentId: '9002' }), { durationId: 3, primaryTalentId: 9001, backupTalentId: 9002, talentId: 9001 });
 });
 test('automatic hire uses selected duration and candidate in the shared validated action', async () => {
   for (const durationId of [1, 2, 3]) {
     const { service, calls } = setup({ inventory: [{ id: 1041, count: 1000 }], hireList: { duration_id: durationId, wage_total: 270, friends: [employee(111, 9002), employee(222, 9001)] } });
-    await service.operateMilkTea('hire', { autoSelect: true, durationId, talentId: 9001 });
+    await service.operateMilkTea('hire', { autoSelect: true, durationId, primaryTalentId: 9001, backupTalentId: 9002 });
     assert.deepEqual(calls.find(x => Number(x.cmd) === 57).milk_tea_hire.hires, [{ slot_index: 0, duration_id: durationId, target_gid: '222' }]);
   }
 });
@@ -308,14 +341,18 @@ test('hire preferences retain numeric values through config patch and reload nor
   const store = require('../src/models/store');
   const accountId = '__milk_tea_hire_preferences_test__';
   const options = { persist: false, accountId };
-  store.applyConfigSnapshot({ automation: { milk_tea_hire_duration: '3', milk_tea_hire_talent: '9002' } }, options);
+  store.applyConfigSnapshot({ automation: { milk_tea_hire_duration: '3', milk_tea_hire_primary_talent: '9002', milk_tea_hire_backup_talent: '9001' } }, options);
   // A second patch normalizes the previously stored snapshot as config loading does.
   const saved = store.applyConfigSnapshot({}, options).automation;
   assert.equal(saved.milk_tea_hire_duration, 3);
-  assert.equal(saved.milk_tea_hire_talent, 9002);
-  const invalid = store.applyConfigSnapshot({ automation: { milk_tea_hire_duration: 99, milk_tea_hire_talent: 'unknown' } }, options).automation;
+  assert.equal(saved.milk_tea_hire_primary_talent, 9002);
+  assert.equal(saved.milk_tea_hire_backup_talent, 9001);
+  const legacy = store.applyConfigSnapshot({ automation: { milk_tea_hire_talent: '9003' } }, { ...options, accountId: `${accountId}_legacy` }).automation;
+  assert.equal(legacy.milk_tea_hire_primary_talent, 9003);
+  const invalid = store.applyConfigSnapshot({ automation: { milk_tea_hire_duration: 99, milk_tea_hire_primary_talent: 'unknown', milk_tea_hire_backup_talent: '9002' } }, options).automation;
   assert.equal(invalid.milk_tea_hire_duration, 1);
-  assert.equal(invalid.milk_tea_hire_talent, 0);
+  assert.equal(invalid.milk_tea_hire_primary_talent, 0);
+  assert.equal(invalid.milk_tea_hire_backup_talent, 0);
 });
 
 test('milk tea logs localized outcomes, hire fallback and skips without dumping payloads', async () => {

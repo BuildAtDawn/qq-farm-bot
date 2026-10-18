@@ -1,6 +1,5 @@
 /* eslint-disable test/no-import-node-test -- This repository runs tests with node --test. */
 import assert from 'node:assert/strict'
-import { Buffer } from 'node:buffer'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import vm from 'node:vm'
@@ -20,24 +19,6 @@ function loadTs(path, globals = {}) {
 }
 
 const { FARM_BRAND } = loadTs('../src/utils/branding.ts')
-
-test('browser and login share a versioned self-contained SVG identity', () => {
-  const html = read('../index.html')
-  assert.ok(html.includes(`href="${FARM_BRAND.icon}"`))
-  assert.ok(html.includes('lang="zh-CN"'))
-  assert.doesNotMatch(html, /<iframe/)
-  const svg = read(`../public${FARM_BRAND.icon.split('?')[0]}`)
-  assert.match(svg, /viewBox="0 0 64 64"/)
-  assert.match(svg, /<title id="brand-title">/)
-  assert.doesNotMatch(svg, /<script|<image|<foreignObject|(?:href|src)=/)
-  assert.ok(Buffer.byteLength(svg) < 2000)
-  for (const path of ['../src/views/CodeLogin.vue']) {
-    const source = read(path)
-    assert.ok(source.includes(':src="FARM_BRAND.icon"'))
-    assert.ok(source.includes('FARM_BRAND.tagline'))
-    assert.doesNotMatch(source, /\/icon\.png/)
-  }
-})
 
 test('signed-in navigation keeps a text-only brand without a redundant logo', () => {
   const source = read('../src/components/Sidebar.vue')

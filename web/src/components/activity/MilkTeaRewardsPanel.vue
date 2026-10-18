@@ -42,8 +42,8 @@ function label(value: number) {
           <button type="button" class="tea-button" :disabled="blocked || !milestones.some(tier => Number(tier.state) === 2)" @click="emit('action', 'shareRewards')">
             <span class="i-carbon-gift" aria-hidden="true" />领取快乐值奖励
           </button>
-          <button type="button" class="tea-link" :disabled="blocked" @click="emit('native')">
-            <span class="i-carbon-launch" aria-hidden="true" />分享快乐
+          <button type="button" class="tea-link" :disabled="blocked || state.share.daily?.first_share_awarded" @click="emit('action', 'share')">
+            <span class="i-carbon-launch" aria-hidden="true" />{{ state.share.daily?.first_share_awarded ? '首次分享已领取' : '分享并领取首次快乐值' }}
           </button>
           <button type="button" class="tea-link" :disabled="blocked" @click="emit('native')">
             领取日志

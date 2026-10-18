@@ -266,6 +266,7 @@ const DEFAULT_AUTOMATION = {
     task_after_farm: false,
     star_passport_claim: false,
     star_solar_claim: false,
+    star_solar_quiz_claim: false,
     star_record_claim: false,
     qingmei_seed_claim: false,
     qingmei_wine_brew: false,
@@ -292,6 +293,7 @@ const DEFAULT_AUTOMATION = {
     // 拾物小铺兑换（exchange，需用户指定商品）、锦囊付费刷新（花点券）、
     // markStories（纯 UI 状态无奖励）、skipBattle（是设置项不是任务）。
     pet_diary_adopt: false,
+    milk_tea_share: false,
     milk_tea_share_daily: false,
     milk_tea_share_rewards: false,
     milk_tea_fund_rewards: false,
@@ -305,6 +307,8 @@ const DEFAULT_AUTOMATION = {
     milk_tea_interaction_type: 1,
     milk_tea_hire_duration: 1,
     milk_tea_hire_talent: 0,
+    milk_tea_hire_primary_talent: 0,
+    milk_tea_hire_backup_talent: 0,
     milk_tea_seed_buy: false,
     pet_diary_feed: false,
     pet_diary_draw: false,
@@ -377,7 +381,7 @@ const SHARE_REWARD_AUTOMATION_KEYS = ['share_reward_share', 'share_reward_daily'
 // （core 是 CommonJS、web 是 TS，无法共享模块）。改一处必须改另一处，
 // 否则前端会显示后端已强制关闭的开关。
 const TIMED_ACTIVITY_AUTOMATION_GROUPS = [
-    { startTime: 1792029600, endTime: 1794844799, keys: ['mall_coupon_gift_buy', 'milk_tea_cashier', 'milk_tea_wages', 'milk_tea_share_daily', 'milk_tea_share_rewards', 'milk_tea_fund_rewards'] },
+    { startTime: 1792029600, endTime: 1794844799, keys: ['mall_coupon_gift_buy', 'milk_tea_cashier', 'milk_tea_wages', 'milk_tea_share', 'milk_tea_share_daily', 'milk_tea_share_rewards', 'milk_tea_fund_rewards'] },
     { startTime: 1792029600, endTime: 1794671998, keys: ['milk_tea_upgrade', 'milk_tea_craft', 'milk_tea_boost', 'milk_tea_hire', 'milk_tea_interact', 'milk_tea_seed_buy'] },
     { startTime: 1790179200, endTime: 1791388799, keys: WISH_SIGN_AUTOMATION_KEYS },
     { startTime: 1790179200, endTime: 1791820799, keys: SHARE_REWARD_AUTOMATION_KEYS },
@@ -407,6 +411,7 @@ function isActivityWindowActive(group, nowSeconds = Math.floor(Date.now() / 1000
 
 function getInactiveActivityAutomationKeys(nowSeconds = Math.floor(Date.now() / 1000)) {
     const keys = new Set(HIDDEN_ACTIVITY_AUTOMATION_KEYS);
+    if (!require('../config/solar-terms').isSolarQuizActive(nowSeconds)) keys.add('star_solar_quiz_claim');
     for (const group of TIMED_ACTIVITY_AUTOMATION_GROUPS) {
         if (isActivityWindowActive(group, nowSeconds)) continue;
         for (const key of group.keys || []) keys.add(key);
@@ -808,7 +813,7 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
             if (!ALLOWED_AUTOMATION_KEYS.has(key)) continue;
 
             if (key === 'fertilizer') {
-                const allowed = ['both', 'normal', 'organic', 'smart', 'smart_only', 'smart_normal', 'final_normal', 'final_organic', 'none'];
+                const allowed = ['both', 'normal', 'organic', 'smart', 'smart_only', 'smart_normal', 'first_normal_final_organic', 'final_normal', 'final_organic', 'none'];
                 cfg.automation[key] = allowed.includes(value) ? value : cfg.automation[key];
             } else if (key === 'fertilizer_land_types') {
                 cfg.automation[key] = normalizeFertilizerLandTypes(value, cfg.automation[key]);
@@ -816,9 +821,16 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
                 cfg.automation[key] = Math.max(60, Math.min(7200, Number(value) || 300));
             } else if (key === 'qixi_friend_priority') {
                 cfg.automation[key] = normalizeKnownFriendGids(value, []);
-            } else if (['milk_tea_hire_duration', 'milk_tea_hire_talent'].includes(key)) {
-                const field = { milk_tea_hire_duration: 'durationId', milk_tea_hire_talent: 'talentId' }[key];
-                cfg.automation[key] = require('../services/activity-milk-tea').normalizeHireOptions({ [field]: value })[field];
+            } else if (['milk_tea_hire_duration', 'milk_tea_hire_talent', 'milk_tea_hire_primary_talent', 'milk_tea_hire_backup_talent'].includes(key)) {
+                const field = { milk_tea_hire_duration: 'durationId', milk_tea_hire_talent: 'talentId', milk_tea_hire_primary_talent: 'primaryTalentId', milk_tea_hire_backup_talent: 'backupTalentId' }[key];
+                const hireInput = {
+                    durationId: cfg.automation.milk_tea_hire_duration,
+                    primaryTalentId: key === 'milk_tea_hire_talent' ? value : cfg.automation.milk_tea_hire_primary_talent,
+                    backupTalentId: cfg.automation.milk_tea_hire_backup_talent,
+                    talentId: cfg.automation.milk_tea_hire_talent,
+                    [field]: value
+                };
+                cfg.automation[key] = require('../services/activity-milk-tea').normalizeHireOptions(hireInput)[field];
             } else if (key === 'milk_tea_interaction_type') {
                 cfg.automation[key] = require('../services/activity-milk-tea').normalizeInteractionType(value);
             } else if (key === 'wish_sign_choice') {
@@ -827,6 +839,10 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
             } else {
                 cfg.automation[key] = !!value;
             }
+        }
+        if (!Object.prototype.hasOwnProperty.call(input.automation, 'milk_tea_hire_primary_talent')
+            && Object.prototype.hasOwnProperty.call(input.automation, 'milk_tea_hire_talent')) {
+            cfg.automation.milk_tea_hire_primary_talent = cfg.automation.milk_tea_hire_talent;
         }
     }
     disableHiddenActivityAutomation(cfg.automation);
@@ -1330,7 +1346,7 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
         for (const [key, value] of Object.entries(patch.automation)) {
             if (cfg.automation[key] === undefined) continue;
             if (key === 'fertilizer') {
-                const allowed = ['both', 'normal', 'organic', 'smart', 'smart_only', 'smart_normal', 'final_normal', 'final_organic', 'none'];
+                const allowed = ['both', 'normal', 'organic', 'smart', 'smart_only', 'smart_normal', 'first_normal_final_organic', 'final_normal', 'final_organic', 'none'];
                 cfg.automation[key] = allowed.includes(value) ? value : cfg.automation[key];
             } else if (key === 'fertilizer_land_types') {
                 cfg.automation[key] = normalizeFertilizerLandTypes(value, cfg.automation[key]);
@@ -1338,9 +1354,16 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
                 cfg.automation[key] = Math.max(60, Math.min(7200, Number(value) || 300));
             } else if (key === 'qixi_friend_priority') {
                 cfg.automation[key] = normalizeKnownFriendGids(value, []);
-            } else if (['milk_tea_hire_duration', 'milk_tea_hire_talent'].includes(key)) {
-                const field = { milk_tea_hire_duration: 'durationId', milk_tea_hire_talent: 'talentId' }[key];
-                cfg.automation[key] = require('../services/activity-milk-tea').normalizeHireOptions({ [field]: value })[field];
+            } else if (['milk_tea_hire_duration', 'milk_tea_hire_talent', 'milk_tea_hire_primary_talent', 'milk_tea_hire_backup_talent'].includes(key)) {
+                const field = { milk_tea_hire_duration: 'durationId', milk_tea_hire_talent: 'talentId', milk_tea_hire_primary_talent: 'primaryTalentId', milk_tea_hire_backup_talent: 'backupTalentId' }[key];
+                const hireInput = {
+                    durationId: cfg.automation.milk_tea_hire_duration,
+                    primaryTalentId: key === 'milk_tea_hire_talent' ? value : cfg.automation.milk_tea_hire_primary_talent,
+                    backupTalentId: cfg.automation.milk_tea_hire_backup_talent,
+                    talentId: cfg.automation.milk_tea_hire_talent,
+                    [field]: value
+                };
+                cfg.automation[key] = require('../services/activity-milk-tea').normalizeHireOptions(hireInput)[field];
             } else if (key === 'milk_tea_interaction_type') {
                 cfg.automation[key] = require('../services/activity-milk-tea').normalizeInteractionType(value);
             } else if (key === 'wish_sign_choice') {
@@ -1349,6 +1372,10 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
             } else {
                 cfg.automation[key] = !!value;
             }
+        }
+        if (!Object.prototype.hasOwnProperty.call(patch.automation, 'milk_tea_hire_primary_talent')
+            && Object.prototype.hasOwnProperty.call(patch.automation, 'milk_tea_hire_talent')) {
+            cfg.automation.milk_tea_hire_primary_talent = cfg.automation.milk_tea_hire_talent;
         }
     }
     disableHiddenActivityAutomation(cfg.automation);

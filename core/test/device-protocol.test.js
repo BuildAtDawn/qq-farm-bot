@@ -54,7 +54,7 @@ test('custom device values are included in the protobuf login device info', () =
 test('a disabled custom protocol does not alter the default login fingerprint', () => {
   const info = buildLoginDeviceInfo({ enabled: false, deviceModel: 'iPhone 17 Pro' });
   assert.deepEqual(info, {
-    client_version: '1.15.0.2_20261001',
+    client_version: '1.15.0.1_20261001',
     sys_software: 'Windows',
   });
   assert.equal(info.sys_hardware, undefined);
@@ -103,7 +103,7 @@ test('an empty custom user agent is preserved and omitted from the QQ handshake'
     assert.equal(protocol.userAgent, '');
     assert.equal(headers['User-Agent'], undefined);
     assert.equal(headers.Origin, 'https://gate-obt.nqf.qq.com');
-    assert.equal(headers.Referer, 'https://appservice.qq.com/1112386029/1.15.0.2/page-frame.html');
+    assert.equal(headers.Referer, 'https://appservice.qq.com/1112386029/1.15.0.1/page-frame.html');
 });
 
 test('custom device protocol rejects incomplete or contradictory fingerprints', () => {

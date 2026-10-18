@@ -13,6 +13,11 @@ vm.runInNewContext(transpile(readFileSync(new URL('../src/constants/activity-win
 const { MILK_TEA_ACTIVITY_WINDOW, MILK_TEA_BUSINESS_WINDOW, MILK_TEA_AUTOMATION_OPTIONS, isWithinActivityWindowMs } = constants.exports
 const helpers = { exports: {} }
 vm.runInNewContext(transpile(readFileSync(new URL('../src/utils/milk-tea.ts', import.meta.url), 'utf8')), helpers)
+test('inventory support time omits zero day and hour units', () => {
+  assert.equal(helpers.exports.teaCountdown(2 * 86400 + 3 * 3600 + 14 * 60), '2天3小时14分钟后')
+  assert.equal(helpers.exports.teaCountdown(3 * 3600 + 14 * 60), '3小时14分钟后')
+  assert.equal(helpers.exports.teaCountdown(14 * 60), '14分钟后')
+})
 const source = readFileSync(new URL('../src/components/activity/MilkTeaActivityPanel.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source)
 const script = ts.createSourceFile('MilkTea.ts', descriptor.scriptSetup.content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
@@ -318,9 +323,9 @@ test('context failures remain separate from activity state and the next poll can
 })
 
 test('both automation pages share all milk tea keys and business-phase visibility', () => {
-  assert.equal(MILK_TEA_AUTOMATION_OPTIONS.length, 12)
+  assert.equal(MILK_TEA_AUTOMATION_OPTIONS.length, 13)
   assert.equal(MILK_TEA_AUTOMATION_OPTIONS.find(item => item.key === 'milk_tea_interact').businessOnly, true)
-  assert.equal(MILK_TEA_AUTOMATION_OPTIONS.filter(item => !item.businessOnly).length, 6)
+  assert.equal(MILK_TEA_AUTOMATION_OPTIONS.filter(item => !item.businessOnly).length, 7)
   for (const file of ['AccountFeatureSettings.vue', 'AutomationSettingsTab.vue']) {
     const page = readFileSync(new URL(`../src/components/settings/${file}`, import.meta.url), 'utf8')
     assert.match(page, /MILK_TEA_AUTOMATION_OPTIONS\.filter/)

@@ -2,6 +2,7 @@
 import type { ActivityLabels } from './types'
 import type { HeluDrawReward, HeluSolarTerm, HeluSolarTerms } from '@/stores/activity'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import { ref } from 'vue'
 
 defineProps<{
   solarTerms?: HeluSolarTerms | null
@@ -11,6 +12,7 @@ defineProps<{
 
 defineEmits<{
   claim: [term: HeluSolarTerm]
+  answer: [payload: { id: number, optionIndex: number }]
 }>()
 
 const T = {
@@ -49,6 +51,17 @@ function rewardSummary(items?: HeluDrawReward[]) {
   return items.map(item => `${rewardName(item)}x${rewardCount(item)}`).join(' / ')
 }
 
+const selected = ref<Record<number, number>>({})
+function choose(termId: number, index: number) {
+  selected.value = { ...selected.value, [termId]: index }
+}
+function selectedOption(termId: number) {
+  return selected.value[termId]
+}
+
+function baseClaimed(term: HeluSolarTerm) {
+  return term.directClaimed ?? (term.status === 3 || term.status === 5)
+}
 
 </script>
 
@@ -69,11 +82,11 @@ function rewardSummary(items?: HeluDrawReward[]) {
     <div class="notes-heading"><h3>节令赠礼</h3><span>时间均为北京时间</span></div>
     <div v-if="!solarTerms?.terms?.length" class="notes-empty">{{ labels.empty }}</div>
     <div v-else class="notes-grid">
-      <article v-for="term in solarTerms.terms" :key="term.id" class="term-letter" :class="{ 'is-claimable': term.claimable, 'is-claimed': term.status === 3, 'is-upcoming': term.statusLabel === '未开始' || term.statusLabel === '未开启', 'is-ended': term.statusLabel === '已结束' }">
+      <article v-for="term in solarTerms.terms" :key="term.id" class="term-letter" :class="{ 'is-claimable': term.claimable || term.answerable, 'is-claimed': baseClaimed(term), 'is-upcoming': term.statusLabel === '未开始' || term.statusLabel === '未开启', 'is-ended': term.statusLabel === '已结束' }">
         <div class="term-heading">
           <div class="term-seal" aria-hidden="true">{{ (term.title || '节令').slice(0, 2) }}</div>
           <div class="min-w-0 flex-1"><h4>{{ term.title || `节令 ${term.id}` }}</h4><span class="term-status"><span v-if="term.statusLabel === '未开始' || term.statusLabel === '未开启'" class="i-carbon-time" aria-hidden="true" /><span v-else-if="term.statusLabel === '已结束'" class="i-carbon-archive" aria-hidden="true" />{{ term.statusLabel || T.unavailable }}</span></div>
-          <div v-if="term.status === 3" class="i-carbon-checkmark-outline shrink-0 text-xl text-emerald-600" aria-hidden="true" />
+          <div v-if="baseClaimed(term)" class="i-carbon-checkmark-outline shrink-0 text-xl text-emerald-600" aria-hidden="true" />
         </div>
         <dl class="term-dates">
           <div><dt>开启</dt><dd>{{ formatTime(term.startTime) }}</dd></div>
@@ -86,8 +99,42 @@ function rewardSummary(items?: HeluDrawReward[]) {
           </div>
           <p v-if="!term.rewards?.length" class="text-xs text-gray-500">暂无奖励信息</p>
         </div>
+        <div v-if="term.answerAvailable" class="term-quiz">
+          <div class="quiz-heading">
+            <strong>节令答题</strong>
+            <span>{{ term.answerStatus }}</span>
+          </div>
+          <div class="letter-rewards quiz-rewards" aria-label="答题附加奖励">
+            <div v-for="(item, index) in term.questionRewards" :key="`${term.id}-quiz-${index}`" class="letter-reward">
+              <div class="reward-icon"><img v-if="item.image" :src="item.image" alt="" loading="lazy"><span v-else class="i-carbon-gift" aria-hidden="true" /></div>
+              <span class="reward-name">{{ rewardName(item) }}</span><strong>×{{ rewardCount(item) }}</strong>
+            </div>
+          </div>
+          <p class="quiz-question">{{ term.question }}</p>
+          <fieldset class="quiz-options" :disabled="loading || !term.answerable">
+            <legend class="sr-only">{{ term.question }}</legend>
+            <label
+              v-for="(option, index) in term.options"
+              :key="`${term.id}-option-${index}`"
+              class="quiz-option"
+              :class="{ selected: selectedOption(term.id) === index, wrong: term.wrongOptions?.includes(index), correct: term.correctOptionIndex === index }"
+            >
+              <input type="radio" :name="`solar-${term.id}`" :value="index" :checked="selectedOption(term.id) === index" :disabled="term.wrongOptions?.includes(index)" @change="choose(term.id, index)">
+              <span class="quiz-option-text">{{ option }}</span>
+              <span v-if="term.correctOptionIndex === index" class="quiz-correct-label">正确答案</span>
+            </label>
+          </fieldset>
+          <p v-if="term.explanation" class="quiz-explanation">{{ term.explanation }}</p>
+          <BaseButton
+            class="mt-3 w-full"
+            variant="secondary"
+            :loading="loading"
+            :disabled="loading || !term.answerable || selectedOption(term.id) === undefined || term.wrongOptions?.includes(selectedOption(term.id) as number)"
+            @click="$emit('answer', { id: term.id, optionIndex: selectedOption(term.id) as number })"
+          >答题领奖</BaseButton>
+        </div>
         <BaseButton v-if="term.claimable" class="mt-auto w-full" variant="primary" :loading="loading" :disabled="loading" @click="$emit('claim', term)">{{ T.claimReward }}</BaseButton>
-        <div v-else class="letter-footer">{{ term.status === 3 ? '赠礼已收下' : term.statusLabel || T.unavailable }}</div>
+        <div v-else class="letter-footer">{{ baseClaimed(term) ? '基础赠礼已领取' : term.statusLabel || T.unavailable }}</div>
       </article>
     </div>
   </section>
@@ -117,4 +164,6 @@ function rewardSummary(items?: HeluDrawReward[]) {
 :global(.dark) .is-ended{border-top-color:#7e847c;background:#242b27}
 :global(.dark) .is-ended .term-status,:global(.dark) .is-ended .letter-footer{background:#363f38;color:#b6bdb2}
 :global(.dark) .is-ended .term-seal{background:#353e36;color:#afb8a8;border-color:#566151}
+.term-quiz{margin-top:4px;padding-top:14px;border-top:1px solid #e6eadf}.quiz-heading{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#4d664d}.quiz-heading span{color:#7d8777}.quiz-question{margin:8px 0;font-size:13px;line-height:1.6;overflow-wrap:anywhere}.quiz-options{display:grid;gap:7px}.quiz-option{display:flex;gap:8px;align-items:flex-start;width:100%;padding:8px 10px;border:1px solid #dfe5d8;border-radius:8px;background:#fbfcf8;text-align:left;font-size:12px;color:#425643}.quiz-option span{display:grid;place-items:center;width:18px;height:18px;flex-shrink:0;border-radius:50%;background:#e7eee0;font-size:10px;font-weight:700}.quiz-option.selected{border-color:#6f9d69;background:#eef7ea}.quiz-option.wrong{border-color:#d9aaa0;background:#fff3f0}:global(.dark) .term-quiz{border-color:#40513f}:global(.dark) .quiz-option{border-color:#40513f;background:#243329;color:#d7e4d3}:global(.dark) .quiz-option.selected{border-color:#85a576;background:#2d4730}:global(.dark) .quiz-option.wrong{border-color:#9e7168;background:#48302c}
+.quiz-options{padding:0;border:0;min-width:0}.quiz-option input{flex-shrink:0;margin-top:2px;accent-color:#4d7c46}.quiz-option span.quiz-option-text{display:block;flex:1;min-width:0;width:auto;height:auto;border-radius:0;background:none;font-size:12px;font-weight:400;overflow-wrap:anywhere}.quiz-option span.quiz-correct-label{display:block;width:auto;height:auto;border-radius:4px;padding:2px 4px;font-size:10px;color:#2a663d;white-space:nowrap}.quiz-option.correct{border-color:#7fa175}.quiz-explanation{margin:8px 0 12px;font-size:12px;line-height:1.6;color:#64705c;overflow-wrap:anywhere}.quiz-rewards{margin:10px 0}.term-quiz{margin-bottom:16px}.quiz-options:disabled{opacity:.7}:global(.dark) .quiz-explanation{color:#bac9ac}:global(.dark) .quiz-correct-label{background:#dce9d4}
 </style>

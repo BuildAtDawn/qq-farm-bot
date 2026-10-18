@@ -4,6 +4,8 @@ import api from '@/api'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
+import { FERTILIZER_TIME_UNITS, fertilizerTimeSeconds, fertilizerTimeValue, type FertilizerTimeUnit } from '@/utils/fertilizer-time'
+import { isSolarQuizActive } from '@/constants/solar-terms'
 import { CHARITY_FLOWER_ACTIVITY_WINDOW, isWithinActivityWindowMs, MILK_TEA_ACTIVITY_WINDOW, MILK_TEA_AUTOMATION_OPTIONS, MILK_TEA_BUSINESS_WINDOW, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
 
 interface AutomationSettings {
@@ -23,6 +25,7 @@ interface AutomationSettings {
     friend_help_exp_limit: boolean
     star_passport_claim: boolean
     star_solar_claim: boolean
+    star_solar_quiz_claim: boolean
     star_record_claim: boolean
     qingmei_seed_claim: boolean
     qingmei_wine_brew: boolean
@@ -54,6 +57,7 @@ interface AutomationSettings {
     fertilizer_buy_organic: boolean
     fertilizer_buy_normal: boolean
     mall_coupon_gift_buy: boolean
+    milk_tea_share: boolean
     milk_tea_cashier: boolean
     milk_tea_wages: boolean
     milk_tea_share_daily: boolean
@@ -68,6 +72,8 @@ interface AutomationSettings {
     milk_tea_seed_buy: boolean
     milk_tea_hire_duration: number
     milk_tea_hire_talent: number
+    milk_tea_hire_primary_talent: number
+    milk_tea_hire_backup_talent: number
     mystery_shop_auto_buy: boolean
     mystery_shop_allow_gold: boolean
     mystery_shop_allow_coupon: boolean
@@ -110,6 +116,11 @@ const emit = defineEmits<{
 }>()
 
 const settings = defineModel<AutomationSettings>('settings', { required: true })
+const fertilizerSmartUnit = ref<FertilizerTimeUnit>('seconds')
+const fertilizerSmartValue = computed({
+  get: () => fertilizerTimeValue(settings.value.automation.fertilizer_smart_seconds ?? 300, fertilizerSmartUnit.value),
+  set: (value: number) => { settings.value.automation.fertilizer_smart_seconds = fertilizerTimeSeconds(value, fertilizerSmartUnit.value) },
+})
 
 function isFastMatureFertilizerMode(mode: string) {
   return mode === 'smart' || mode === 'smart_only' || mode === 'smart_normal'
@@ -119,6 +130,7 @@ const mysteryShopSettingsVisible = ref(false)
 const SHOW_STAR_ACTIVITY = false
 const SHOW_QIXI_ACTIVITY = false
 const nowMs = ref(Date.now())
+const showSolarQuiz = computed(() => isSolarQuizActive(nowMs.value))
 let nowTimer: ReturnType<typeof window.setInterval> | null = null
 const showMilkTeaActivity = computed(() => isWithinActivityWindowMs(MILK_TEA_ACTIVITY_WINDOW, nowMs.value))
 const showMilkTeaBusiness = computed(() => isWithinActivityWindowMs(MILK_TEA_BUSINESS_WINDOW, nowMs.value))
@@ -317,8 +329,12 @@ watch(() => props.currentAccountId, loadQixiFriends)
               <BaseSelect v-model="settings.automation.milk_tea_hire_duration" label="雇佣时长" :options="[
                 { label: '4 小时', value: 1 }, { label: '12 小时', value: 2 }, { label: '24 小时', value: 3 },
               ]" />
-              <BaseSelect v-model="settings.automation.milk_tea_hire_talent" label="雇佣类型" :options="[
-                { label: '任意好友', value: 0 }, { label: '金牌销售', value: 9001 }, { label: '金牌宣传', value: 9002 },
+              <BaseSelect v-model="settings.automation.milk_tea_hire_primary_talent" label="首选优先级" :options="[
+                { label: '随机雇佣', value: 0 }, { label: '金牌销售', value: 9001 }, { label: '金牌宣传', value: 9002 },
+                { label: '金牌服务', value: 9003 }, { label: '实习员工', value: 9004 },
+              ]" />
+              <BaseSelect v-model="settings.automation.milk_tea_hire_backup_talent" label="备用优先级" :disabled="settings.automation.milk_tea_hire_primary_talent === 0" :options="[
+                { label: '随机雇佣', value: 0 }, { label: '金牌销售', value: 9001 }, { label: '金牌宣传', value: 9002 },
                 { label: '金牌服务', value: 9003 }, { label: '实习员工', value: 9004 },
               ]" />
             </div>
@@ -330,9 +346,11 @@ watch(() => props.currentAccountId, loadQixiFriends)
           <div v-if="SHOW_STAR_ACTIVITY" class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
             <BaseSwitch v-model="settings.automation.star_passport_claim" label="自动领取千星游记" />
           </div>
-          <div class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
-            <BaseSwitch v-model="settings.automation.star_solar_claim" label="自动领取节令小札" />
-          </div>
+          <section class="border border-gray-200 rounded-lg bg-white px-4 py-3 space-y-3 dark:border-gray-700 dark:bg-gray-800">
+            <h3 class="text-sm font-medium">节令小札</h3>
+            <BaseSwitch v-model="settings.automation.star_solar_claim" label="自动领取节令小礼" />
+            <BaseSwitch v-if="showSolarQuiz" v-model="settings.automation.star_solar_quiz_claim" label="自动领取答题附加奖励" />
+          </section>
           <div v-if="SHOW_STAR_ACTIVITY" class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
             <BaseSwitch v-model="settings.automation.star_record_claim" label="自动领取观星礼录" />
           </div>
@@ -549,19 +567,13 @@ watch(() => props.currentAccountId, loadQixiFriends)
 
         <div v-if="isFastMatureFertilizerMode(settings.automation.fertilizer)" class="rounded bg-amber-50 p-3 text-sm dark:bg-amber-900/20">
           <div class="mb-2 text-sm text-gray-900 font-medium dark:text-gray-100">
-            快成熟判定秒数
+            快成熟判定
           </div>
           <div class="flex flex-wrap items-end gap-4">
-            <BaseInput
-              v-model.number="settings.automation.fertilizer_smart_seconds"
-              label="秒数"
-              type="number"
-              min="30"
-              max="3600"
-              class="w-40"
-            />
+            <BaseInput v-model.number="fertilizerSmartValue" label="数值" type="number" min="1" max="7200" step="0.5" class="w-40" />
+            <BaseSelect v-model="fertilizerSmartUnit" label="单位" :options="FERTILIZER_TIME_UNITS" class="w-32" />
             <span class="pb-2 text-xs text-gray-500 dark:text-gray-400">
-              距离成熟时间 ≤ 此秒数时施肥（默认300秒=5分钟）
+              距离成熟时间 ≤ 此设置时施肥（后端按秒保存，当前 {{ settings.automation.fertilizer_smart_seconds }} 秒）
             </span>
           </div>
         </div>

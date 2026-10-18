@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package gamepb.solartermspb;
+
+import "corepb.proto";
+
+message GetSolarTermsV2Request {}
+
+message GetSolarTermsV2Reply {
+  repeated SolarTermsEventInfo events = 1;
+  int64 server_time = 2;
+  int64 default_event_id = 3;
+  repeated SolarSeasonInfo seasons = 4;
+  bool entry_red_dot = 5;
+  bool album_red_dot = 6;
+}
+
+message SolarTermsEventInfo {
+  int64 id = 1;
+  // Official V2 window status: unknown=0, locked=1, open=2, expired=3.
+  int32 window_status = 2;
+  int64 open_start_time = 3;
+  int64 open_end_time = 4;
+  repeated corepb.Item rewards = 5;
+  repeated corepb.Item question_rewards = 6;
+  bool direct_claimed = 7;
+  bool quiz_claimed = 8;
+  bool quiz_wrong_today = 9;
+  repeated int32 wrong_options = 10;
+}
+
+message ClaimSolarTermsV2Request { int64 id = 1; }
+message ClaimSolarTermsV2Reply {
+  repeated corepb.Item rewards = 1;
+  SolarTermsEventInfo updated_event = 2;
+}
+
+message AnswerSolarTermsRequest {
+  int64 id = 1;
+  // Zero-based index into SolarTermsConfig.answer split by semicolons.
+  int32 option_index = 2;
+}
+message AnswerSolarTermsReply {
+  bool correct = 1;
+  repeated corepb.Item rewards = 2;
+  SolarTermsEventInfo updated_event = 3;
+}
+
+message ClaimSolarSeasonRequest { int64 id = 1; }
+message ClaimSolarSeasonReply {
+  repeated corepb.Item rewards = 1;
+  SolarSeasonInfo updated_season = 2;
+}
+
+message SolarSeasonInfo {
+  int64 id = 1;
+  repeated int64 event_ids = 2;
+  int32 lit_count = 3;
+  int32 total_count = 4;
+  bool reward_claimable = 5;
+  bool reward_claimed = 6;
+  repeated corepb.Item rewards = 7;
+  bool current = 8;
+}

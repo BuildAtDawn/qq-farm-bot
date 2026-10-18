@@ -4,7 +4,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import api from '@/api'
 import { isWithinActivityWindowMs, MILK_TEA_ACTIVITY_WINDOW, MILK_TEA_AUTOMATION_OPTIONS } from '@/constants/activity-windows'
 import { useAccountStore } from '@/stores/account'
-import { teaActionReason, teaBalance, teaCandidateAvailable, teaCurrencyImage, teaDate, teaGoodsReason, teaHireReason, teaImage, teaInteger, teaNameValid, teaNumber, teaOpenSlots, teaPhase, teaPlainText, teaPurchaseMax, teaQuickEntries, teaRecentLogs } from '@/utils/milk-tea'
+import { teaActionReason, teaBalance, teaCandidateAvailable, teaCurrencyImage, teaDate, teaGoodsReason, teaHireReason, teaImage, teaInteger, teaNameValid, teaNumber, teaOpenSlots, teaPhase, teaPlainText, teaPurchaseMax, teaQuickEntries, teaRecentLogs, teaScaleRewards } from '@/utils/milk-tea'
 import MilkTeaAutomationStatus from './MilkTeaAutomationStatus.vue'
 import MilkTeaCraftDialog from './MilkTeaCraftDialog.vue'
 import MilkTeaDialog from './MilkTeaDialog.vue'
@@ -24,6 +24,7 @@ const busy = ref(false)
 const error = ref('')
 const modal = ref('')
 const purchaseCount = ref(1)
+const boostCount = ref(1)
 const records = ref<any>(null)
 const shopName = ref('')
 const craftInitialUids = ref<string[]>([])
@@ -47,6 +48,12 @@ const active = computed(() => inWindow.value && (!state.value || ['business', 's
 const blocked = computed(() => loading.value || busy.value || !accounts.currentAccountId || !active.value)
 const selectedGoods = computed(() => state.value?.goods?.find(good => `goods:${good.id}` === modal.value))
 const purchaseMax = computed(() => selectedGoods.value && state.value && !teaGoodsReason(selectedGoods.value, teaPhase(state.value, nowSec.value)) ? teaPurchaseMax(selectedGoods.value) : 0)
+const boostMax = computed(() => state.value?.shop ? Number(teaInteger(teaBalance(state.value, state.value.shop.sales_item_id))) : 0)
+const boostPreviewCount = computed(() => {
+  const count = Math.floor(Number(boostCount.value))
+  return Number.isSafeInteger(count) && count >= 1 ? Math.min(count, Math.max(1, boostMax.value)) : 1
+})
+const boostPreviewRewards = computed(() => teaScaleRewards(state.value?.shop?.boost_preview_rewards, boostPreviewCount.value))
 const validPurchase = computed(() => Number.isSafeInteger(purchaseCount.value) && purchaseCount.value >= 1 && purchaseCount.value <= purchaseMax.value)
 const selectedRecipe = computed(() => state.value?.recipes?.find(recipe => `recipe:${recipe.recipe_id}` === modal.value))
 const selectedInteraction = computed(() => state.value?.interactions?.find(interaction => `interact:${interaction.interaction_id}` === modal.value))
@@ -73,6 +80,7 @@ const modalTitle = computed(() => {
 })
 watch(modal, (kind) => {
   purchaseCount.value = 1
+  boostCount.value = 1
   if (kind === 'create' || kind === 'rename')
     shopName.value = state.value?.summary.shop_name || '奶茶冲鸭'
 })
@@ -86,6 +94,9 @@ watch(availableSlots, (slots) => {
 })
 function clampPurchase() {
   purchaseCount.value = Math.min(Math.max(1, purchaseMax.value), Math.max(1, Math.floor(Number(purchaseCount.value) || 1)))
+}
+function clampBoost() {
+  boostCount.value = Math.min(Math.max(1, boostMax.value), Math.max(1, Math.floor(Number(boostCount.value) || 1)))
 }
 function totalCost(cost: TeaItem) {
   return (teaInteger(cost.count) * BigInt(validPurchase.value ? purchaseCount.value : 0)).toString()
@@ -492,16 +503,29 @@ onUnmounted(() => {
         <template v-else-if="modal === 'boost' && state.shop">
           <div class="tea-product">
             <img :src="teaImage('icon_s4_boost')" alt=""><div>
-              <b>宣传喇叭 ×1</b><p class="tea-muted">
+              <b>宣传喇叭 ×{{ boostCount }}</b><p class="tea-muted">
                 现有 {{ teaNumber(teaBalance(state, state.shop.sales_item_id)) }} 个
               </p>
             </div>
           </div>
+          <div class="tea-purchase-quantity">
+            <span>使用数量</span><div class="tea-stepper">
+              <button type="button" aria-label="减少宣传喇叭数量" :disabled="blocked || boostCount <= 1" @click="boostCount = Math.max(1, boostCount - 1)">
+                <span class="i-carbon-subtract" aria-hidden="true" />
+              </button>
+              <input v-model.number="boostCount" type="number" min="1" :max="Math.max(1, boostMax)" step="1" aria-label="宣传喇叭数量" :disabled="blocked || !boostMax" @change="clampBoost">
+              <button type="button" aria-label="增加宣传喇叭数量" :disabled="blocked || boostCount >= boostMax" @click="boostCount = Math.min(boostMax, boostCount + 1)">
+                <span class="i-carbon-add" aria-hidden="true" />
+              </button>
+            </div><button type="button" class="tea-link" :disabled="blocked || !boostMax" @click="boostCount = boostMax">
+              最大
+            </button>
+          </div>
           <p class="tea-next-unlock">
-            预计售出 {{ teaNumber(state.shop.boost_cups_per_use) }} 杯
+            预计售出 {{ teaNumber(teaInteger(state.shop.boost_cups_per_use) * BigInt(boostPreviewCount)) }} 杯
           </p>
           <div class="tea-rewards">
-            <MilkTeaRewardIcon v-for="item in state.shop.boost_preview_rewards || []" :key="String(item.id)" :item="item" named />
+            <MilkTeaRewardIcon v-for="item in boostPreviewRewards" :key="String(item.id)" :item="item" named />
           </div>
           <p class="tea-rule-note">
             仅消耗已有宣传喇叭，不自动补购，不消耗钻石。
@@ -555,8 +579,8 @@ onUnmounted(() => {
           <button v-else-if="selectedGoods" type="button" class="tea-button tea-button--primary" :disabled="blocked || !validPurchase || !!teaGoodsReason(selectedGoods, phase!)" @click="act('buy', { goodsId: selectedGoods.id, count: purchaseCount })">
             {{ selectedGoods.paid ? '不支持钻石购买' : '确认兑换' }}
           </button>
-          <button v-else-if="modal === 'boost'" type="button" class="tea-button tea-button--primary" :disabled="blocked || !!teaActionReason(state, 'boost', {}, nowSec)" @click="act('boost')">
-            使用 1 个
+          <button v-else-if="modal === 'boost'" type="button" class="tea-button tea-button--primary" :disabled="blocked || !boostMax || !!teaActionReason(state, 'boost', { count: boostCount }, nowSec)" @click="act('boost', { count: boostCount })">
+            使用 {{ boostCount }} 个
           </button>
           <button v-else-if="selectedInteraction" type="button" class="tea-button tea-button--primary" :disabled="blocked || !!teaActionReason(state, 'interact', { interactionType: selectedInteraction.interaction_id }, nowSec)" @click="act('interact', { interactionType: selectedInteraction.interaction_id })">
             确认互动

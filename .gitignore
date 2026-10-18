@@ -6,6 +6,8 @@ web/node_modules/
 
 web/dist/
 web/stats.html
+/output/
+/.playwright-cli/
 dist/
 build/
 coverage/
@@ -13,11 +15,14 @@ coverage/
 .vite/
 .turbo/
 
-core/data/
-core/docs/
+# Private runtime data and investigation documents are never published.
+/core/data/
+/core/docs/
+
+# Temporary local work is never committed.
+/tmp/
 logs/
 log/
-tmp/
 temp/
 .tmp/
 
