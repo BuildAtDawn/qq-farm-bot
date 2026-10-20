@@ -15,7 +15,7 @@ const { types } = require('./proto');
 const { toLong, toNum, syncServerTime, log, logWarn } = require('./utils');
 const cryptoWasm = require('./crypto-wasm');
 const { createGatewayToken } = require('./gateway-token');
-const { evaluateGatewayHealth, getOldestPendingAgeMs } = require('./gateway-health');
+const { evaluateGatewayHealth, getOldestPendingAgeMs, shouldTerminateForHeartbeat, MAX_HEARTBEAT_MISSES } = require('./gateway-health');
 const { createRequestGate, getRequestPriority } = require('./request-priority');
 const { TsdkRuntime } = require('./tsdk-runtime');
 
@@ -59,6 +59,9 @@ let clientSeq = 1;
 let serverSeq = 0;
 const pendingCallbacks = new Map();
 const pendingStartedAt = new Map();
+const pendingMeta = new Map();
+let lastInboundAt = Date.now();
+let lastDownDesc = '';
 const requestGate = createRequestGate({ maxActive: 8, maxQueued: 100 });
 let wsErrorState = { code: 0, at: 0, message: '' };
 const networkScheduler = createScheduler('network');
@@ -109,6 +112,22 @@ function resolveDeviceFingerprint(deviceProtocol) {
 function logAce(level, message) {
     if (level === 'warn' || level === 'error') logWarn('ACE', message);
     else log('ACE', message);
+}
+
+function netDiag(message, extra) {
+    const accountId = process.env.FARM_ACCOUNT_ID || '';
+    const detail = extra && typeof extra === 'object' ? ' ' + JSON.stringify(extra) : '';
+    log('netdiag', `[acc=${accountId}] ${message}${detail}`);
+}
+
+function dumpPendingMeta() {
+    const now = Date.now();
+    const items = [];
+    for (const [seq, meta] of pendingMeta) {
+        const age = now - meta.at;
+        items.push(`${meta.service}.${meta.method}(seq=${seq},age=${Math.round(age / 1000)}s)`);
+    }
+    return items.join(' | ') || '(空)';
 }
 
 function buildTsdkDeviceInfo(deviceProtocol) {
@@ -269,6 +288,7 @@ async function sendMsg(serviceName, methodName, bodyBytes, callback) {
     if (callback) {
         pendingCallbacks.set(seq, callback);
         pendingStartedAt.set(seq, Date.now());
+        pendingMeta.set(seq, { service: serviceName, method: methodName, at: Date.now() });
     }
     // ws.send(encoded);
     try {
@@ -277,6 +297,7 @@ async function sendMsg(serviceName, methodName, bodyBytes, callback) {
         if (callback) {
             pendingCallbacks.delete(seq);
             pendingStartedAt.delete(seq);
+            pendingMeta.delete(seq);
             callback(err);
         }
         return false;
@@ -309,6 +330,7 @@ async function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 20000,
             settled = true;
             pendingCallbacks.delete(seq);
             pendingStartedAt.delete(seq);
+            pendingMeta.delete(seq);
             const pending = pendingCallbacks.size;
             reject(new Error(`请求超时: ${methodName} (seq=${seq}, pending=${pending})`));
         });
@@ -329,6 +351,7 @@ async function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 20000,
             networkScheduler.clear(timeoutKey);
             pendingCallbacks.delete(seq);
             pendingStartedAt.delete(seq);
+            pendingMeta.delete(seq);
             settled = true;
             reject(error);
         });
@@ -352,6 +375,12 @@ function handleMessage(data) {
         }
 
         const msgType = meta.message_type;
+        lastInboundAt = Date.now();
+        lastDownDesc = msgType === 2
+            ? `resp:${meta.service_name}.${meta.method_name}(code=${meta.error_code})`
+            : msgType === 3
+                ? 'notify'
+                : `type=${msgType}`;
 
         // Notify
         if (msgType === 3) {
@@ -368,6 +397,7 @@ function handleMessage(data) {
             if (cb) {
                 pendingCallbacks.delete(clientSeqVal);
                 pendingStartedAt.delete(clientSeqVal);
+                pendingMeta.delete(clientSeqVal);
                 if (errorCode !== 0) {
                     cb(new Error(`${meta.service_name}.${meta.method_name} 错误: code=${errorCode} ${meta.error_message || ''}`));
                 } else {
@@ -621,13 +651,24 @@ function buildLoginDeviceInfo(deviceProtocol) {
     };
 }
 
+let loginSharer = null;
+
+/**
+ * 设置登录时的分享来源（模拟"通过某人的分享链接进入"）。
+ * @param {{sharerId?: number|string, sharerOpenId?: string, shareCfgId?: number|string, sceneId?: string}|null} sharer
+ */
+function setLoginSharer(sharer) {
+    loginSharer = sharer && typeof sharer === 'object' ? sharer : null;
+}
+
 function buildLoginBody(deviceProtocol) {
+    const s = loginSharer || {};
     return Buffer.from(types.LoginRequest.encode(types.LoginRequest.create({
-        sharer_id: toLong(0),
-        sharer_open_id: '',
+        sharer_id: toLong(s.sharerId || 0),
+        sharer_open_id: String(s.sharerOpenId || ''),
         device_info: buildLoginDeviceInfo(deviceProtocol),
-        share_cfg_id: toLong(0),
-        scene_id: '1234567',
+        share_cfg_id: toLong(s.shareCfgId || 0),
+        scene_id: String(s.sceneId || '1234567'),
         report_data: {
             callback: '', cd_extend_info: '', click_id: '', clue_token: '',
             minigame_channel: 'other-qq', minigame_platid: 2, req_id: '', trackid: '',
@@ -703,7 +744,6 @@ async function sendLogin(onLoginSuccess, deviceProtocol) {
 let lastHeartbeatResponse = Date.now();
 let heartbeatMissCount = 0;
 const HEARTBEAT_TIMEOUT = 30000;
-const MAX_HEARTBEAT_MISS = 3;
 
 function getGatewayHealth() {
     const now = Date.now();
@@ -724,33 +764,20 @@ function getGatewayHealth() {
 function startHeartbeat() {
     networkScheduler.clear('heartbeat_interval');
     lastHeartbeatResponse = Date.now();
+    lastInboundAt = Date.now();
     heartbeatMissCount = 0;
 
     networkScheduler.setIntervalTask('heartbeat_interval', CONFIG.heartbeatInterval, () => {
         if (!userState.gid) return;
 
-        const timeSinceLastResponse = Date.now() - lastHeartbeatResponse;
-        if (timeSinceLastResponse > HEARTBEAT_TIMEOUT) {
-            heartbeatMissCount++;
-            logWarn('心跳', `连接可能已断开 (${Math.round(timeSinceLastResponse/1000)}s 无响应, miss=${heartbeatMissCount}/${MAX_HEARTBEAT_MISS}, pending=${pendingCallbacks.size})`);
-            if (heartbeatMissCount >= MAX_HEARTBEAT_MISS) {
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    log('心跳', '连接已关闭，立即重连...');
-                } else {
-                    log('心跳', '心跳超时，关闭连接并重连...');
-                    try { ws.close(); } catch { }
-                }
-                networkEvents.emit('disconnect', { code: 'heartbeat_timeout' });
-                rejectAllPendingRequests('连接超时，已清理');
-                reconnect(null);
-                return;
-            }
-        }
-
         const body = buildHeartbeatBody(userState.gid);
+        const hbSendAt = Date.now();
         sendMsgAsync('gamepb.userpb.UserService', 'Heartbeat', body, 20000, { priority: 'critical' }).then(({ body: replyBody }) => {
+            const hbRtt = Date.now() - hbSendAt;
             lastHeartbeatResponse = Date.now();
+            lastInboundAt = Date.now();
             heartbeatMissCount = 0;
+            if (hbRtt > 5000) netDiag(`心跳响应慢 rtt=${hbRtt}ms`);
             try {
                 const reply = types.HeartbeatReply.decode(replyBody);
                 applyServerVersionInfo(reply.version_info);
@@ -760,7 +787,28 @@ function startHeartbeat() {
                     syncServerTime(serverTimeMs);
                 }
             } catch { }
-        }).catch(() => { });
+        }).catch((e) => {
+            if (!isConnected()) return;
+            heartbeatMissCount += 1;
+            const now = Date.now();
+            const inboundSilenceMs = Math.max(0, now - lastInboundAt);
+            const heartbeatSilenceMs = Math.max(0, now - lastHeartbeatResponse);
+            logWarn('心跳', `心跳未响应 (miss=${heartbeatMissCount}/${MAX_HEARTBEAT_MISSES}, heartbeat=${Math.round(heartbeatSilenceMs / 1000)}s, inbound=${Math.round(inboundSilenceMs / 1000)}s, pending=${pendingCallbacks.size})`);
+            netDiag(`心跳失败 miss=${heartbeatMissCount}/${MAX_HEARTBEAT_MISSES}`, {
+                pending: dumpPendingMeta(),
+                lastDown: lastDownDesc,
+                inboundSilenceSec: Math.round(inboundSilenceMs / 1000),
+            });
+            // 单一终止条件：连续心跳失败 AND 连接完全无入站数据（对齐官方心跳语义）。
+            // 只看心跳应答会误杀"业务流量正常、只是 Heartbeat 回得慢或排队超时"的健康连接，造成频繁掉线。
+            if (shouldTerminateForHeartbeat(heartbeatMissCount, inboundSilenceMs)) {
+                log('心跳', `${Math.round(inboundSilenceMs / 1000)}s 无入站数据，连续 ${heartbeatMissCount} 次心跳失败，账号将停止运行...`);
+                networkEvents.emit('disconnect', { code: 'heartbeat_timeout' });
+                rejectAllPendingRequests('心跳超时，已清理');
+                reconnect(null);
+                return;
+            }
+        });
     });
 }
 
@@ -899,9 +947,12 @@ function connect(code, onLoginSuccess) {
         handleMessage(Buffer.isBuffer(data) ? data : Buffer.from(data));
     });
 
-    socket.on('close', (code, _reason) => {
+    socket.on('close', (code, reasonBuf) => {
         if (ws === socket) ws = null;
-        logWarn('系统', `[WS] 连接关闭 (code=${code})`);
+        let reasonStr = '';
+        try { reasonStr = Buffer.isBuffer(reasonBuf) ? reasonBuf.toString('utf8') : String(reasonBuf || ''); } catch { }
+        logWarn('系统', `[WS] 连接关闭 (code=${code}) reason=${reasonStr}`);
+        netDiag(`WS 关闭 code=${code} reason=${reasonStr}`, { lastDown: lastDownDesc, pending: dumpPendingMeta() });
         networkEvents.emit('disconnect', { code });
         cleanup();
         scheduleReconnect(`close:${code}`);
@@ -910,6 +961,7 @@ function connect(code, onLoginSuccess) {
     socket.on('error', (err) => {
         const message = err && err.message ? String(err.message) : '';
         logWarn('系统', `[WS] 错误: ${message}`);
+        netDiag(`WS error: ${message}`);
         const match = message.match(/Unexpected server response:\s*(\d+)/i);
         if (match) {
             const code = Number.parseInt(match[1], 10) || 0;
@@ -964,6 +1016,7 @@ module.exports = {
     getAceStatus,
     buildLoginDeviceInfo,
     buildLoginBody,
+    setLoginSharer,
     buildHeartbeatBody,
     buildWebSocketHeaders,
     buildTsdkDeviceInfo,
