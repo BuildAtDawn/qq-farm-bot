@@ -12,17 +12,46 @@ function getGrowthPlantingNeeds(tasks) {
     if (!Number.isSafeInteger(total) || total <= 0 || !Number.isSafeInteger(progress) || progress < 0) continue;
     const remaining = Math.max(0, total - progress);
     if (!remaining) continue;
-    // One planting can advance several already unlocked tasks for the same seed.
-    needs.set(definition.seedId, Math.max(needs.get(definition.seedId) || 0, remaining));
+    const action = definition.action === 'buy' ? 'buy' : 'plant';
+    const existing = needs.get(definition.seedId);
+    if (existing) {
+      // One planting can advance several already unlocked tasks for the same seed.
+      existing.count = Math.max(existing.count, remaining);
+      if (!existing.actions.includes(action)) existing.actions.push(action);
+    } else {
+      needs.set(definition.seedId, { count: remaining, actions: [action] });
+    }
   }
-  return [...needs].map(([seedId, count]) => ({ seedId, count }));
+  return [...needs].map(([seedId, need]) => ({ seedId, count: need.count, actions: need.actions }));
+}
+
+// 购买类成长任务（condition=购买N个X种子）：进度只由「购买」动作驱动，与种植无关，
+// 也不依赖空地。直接按剩余进度补购种子，购买成功后由服务端计入任务进度。
+async function buyGrowthTaskSeeds(deps) {
+  const tasks = await deps.getTasks();
+  const needs = getGrowthPlantingNeeds(tasks).filter(need => need.actions.includes('buy'));
+  if (!needs.length) return [];
+  const bought = [];
+  for (const need of needs) {
+    try {
+      const seeds = await deps.getBagSeeds();
+      const owned = Math.max(0, Number(seeds.find(seed => Number(seed.seedId) === need.seedId)?.count) || 0);
+      const count = await deps.buySeed(need.seedId, need.count, owned);
+      if (count > 0) bought.push({ seedId: need.seedId, count });
+    }
+    catch (error) {
+      deps.warn?.(`购买类任务补购种子失败 (seedId=${need.seedId}): ${error.message}`);
+    }
+  }
+  return bought;
 }
 
 async function plantGrowthTasks(landIds, deps) {
   const plantedLandIds = [];
   let remainingLandIds = [...landIds];
   const tasks = await deps.getTasks();
-  const needs = getGrowthPlantingNeeds(tasks);
+  // 购买类任务由 buyGrowthTaskSeeds 处理，这里只种「种植类」任务。
+  const needs = getGrowthPlantingNeeds(tasks).filter(need => need.actions.includes('plant'));
   if (!needs.length) return { plantedLandIds, remainingLandIds };
   const seeds = await deps.getBagSeeds();
   for (const need of needs) {
@@ -47,4 +76,4 @@ async function plantGrowthTasks(landIds, deps) {
   return { plantedLandIds, remainingLandIds };
 }
 
-module.exports = { getGrowthPlantingNeeds, plantGrowthTasks };
+module.exports = { getGrowthPlantingNeeds, plantGrowthTasks, buyGrowthTaskSeeds };

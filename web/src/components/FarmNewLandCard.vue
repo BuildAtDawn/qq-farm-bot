@@ -364,15 +364,15 @@ function markMutantIconFailed(effect: { id?: number }) {
       <button
         v-if="showRemoveAction && canRemoveLand(land)"
         type="button"
-        class="land-remove absolute right-2 top-2 z-10 flex items-center gap-0.5 border border-red-200 rounded-md bg-white/80 px-1.5 py-1 text-[10px] text-red-600 transition disabled:cursor-not-allowed dark:border-red-800 dark:bg-gray-900/70 hover:bg-red-50 dark:text-red-300 disabled:opacity-40"
+        class="land-remove absolute right-1 top-1 z-10 flex items-center gap-0.5 border border-red-200 rounded bg-white/80 p-[3px] text-[9px] text-red-600 transition sm:right-2 sm:top-2 sm:px-1.5 sm:py-1 sm:text-[10px] disabled:cursor-not-allowed dark:border-red-800 dark:bg-gray-900/70 hover:bg-red-50 dark:text-red-300 disabled:opacity-40"
         :disabled="removeDisabled"
         :aria-label="`铲除第 ${land.id} 块土地的${land.plantName || '作物'}`"
         title="铲除作物"
         @click.stop="emit('remove', land)"
         @keydown.stop
       >
-        <span class="i-carbon-trash-can" />
-        铲除
+        <span class="i-carbon-trash-can h-2.5 w-2.5 sm:h-3.5 sm:w-3.5" />
+        <span class="land-remove__label">铲除</span>
       </button>
     </div>
 

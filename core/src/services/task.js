@@ -22,6 +22,7 @@ let taskSystemVersion = 0;
 let taskClaimDoneDateKey = '';
 let taskClaimLastAt = 0;
 let friendInteractionRetryAt = 0;
+let openFriendPanelRetryAt = 0;
 
 const taskScheduler = createScheduler('task');
 const MAX_TASK_CLAIM_ROUNDS = 10;
@@ -93,6 +94,20 @@ async function claimDailyReward(type, pointIds) {
   ).finish();
   const { body } = await sendMsgAsync('gamepb.taskpb.TaskService', 'ClaimDailyReward', request);
   return types.ClaimDailyRewardReply.decode(body);
+}
+
+/**
+ * 客户端上报任务进度（部分 UI 引导类成长任务需客户端主动上报才会推进）
+ */
+async function reportTaskProgress(taskId, progress) {
+  if (!types.ClientReportProgressRequest || !types.ClientReportProgressReply) {
+    throw new Error('ClientReportProgress 协议类型未加载');
+  }
+  const request = types.ClientReportProgressRequest.encode(
+    types.ClientReportProgressRequest.create({ task_id: toLong(taskId), progress: toLong(progress) })
+  ).finish();
+  const { body } = await sendMsgAsync('gamepb.taskpb.TaskService', 'ClientReportProgress', request);
+  return types.ClientReportProgressReply.decode(body);
 }
 
 async function claimAllIllustratedRewards() {
@@ -207,6 +222,48 @@ function isPendingFriendInteractionTask(task) {
   return !!task && !!task.is_unlocked && !task.is_claimed &&
     toNum(task.total_progress) === 1 && toNum(task.progress) < 1 &&
     /^在\s*1\s*个好友农场进行互动[。！!]?$/.test(String(task.desc || '').trim());
+}
+
+/**
+ * 识别成长任务「打开好友面板」类任务（新手引导，进度未满）。
+ * 完成方式：拉取好友列表（打开好友面板的动作），服务端据此判定进度。
+ */
+function isPendingOpenFriendPanelTask(task) {
+  return !!task && !!task.is_unlocked && !task.is_claimed &&
+    toNum(task.total_progress) > 0 && toNum(task.progress) < toNum(task.total_progress) &&
+    /打开好友面板|打开好友|好友面板/.test(String(task.desc || ''));
+}
+
+async function completeOpenFriendPanelTask(task, shouldContinue) {
+  const taskId = toNum(task && task.id);
+  const total = toNum(task && task.total_progress);
+  try {
+    // 1) 打开好友面板的动作：拉取好友列表。
+    const { getFriendsList } = require('./friend-land-analyzer');
+    await getFriendsList(true);
+    if (!shouldContinue()) return false;
+    // 2) 这类 UI 引导任务服务端不会因拉取好友列表自动判定，需客户端上报进度。
+    let reported = false;
+    if (taskId > 0 && total > 0) {
+      try {
+        await reportTaskProgress(taskId, total);
+        reported = true;
+      } catch (err) {
+        logWarn('任务', `上报打开好友面板进度失败: ${err.message}`, {
+          module: 'task', event: '打开好友面板', result: 'error', taskId,
+        });
+      }
+    }
+    log('任务', `已打开好友面板（拉取好友列表）${reported ? '并上报任务进度' : ''}`, {
+      module: 'task', event: '打开好友面板', result: 'ok', taskId, reported,
+    });
+    return true;
+  } catch (err) {
+    logWarn('任务', `打开好友面板失败: ${err.message}`, {
+      module: 'task', event: '打开好友面板', result: 'error',
+    });
+    return false;
+  }
 }
 
 function summarizeDailyTaskProgress(dailyTasksRaw) {
@@ -365,6 +422,7 @@ async function checkAndClaimTasks() {
     version === taskSystemVersion && isAutomationOn('task') && isConnected();
   const attemptedIds = new Set();
   let interactionChecked = false;
+  let panelChecked = false;
 
   try {
     let reply = await getTaskInfo();
@@ -380,6 +438,17 @@ async function checkAndClaimTasks() {
         await completeDailyFriendInteraction(canContinue);
         if (!canContinue()) return;
         // Only the server decides completion, including after an ambiguous write failure.
+        reply = await getTaskInfo();
+        continue;
+      }
+
+      if (!panelChecked && Date.now() >= openFriendPanelRetryAt &&
+        buildGrowthTasks(taskInfo).some(isPendingOpenFriendPanelTask)) {
+        panelChecked = true;
+        openFriendPanelRetryAt = Date.now() + 120_000;
+        const pendingPanelTask = buildGrowthTasks(taskInfo).find(isPendingOpenFriendPanelTask);
+        await completeOpenFriendPanelTask(pendingPanelTask, canContinue);
+        if (!canContinue()) return;
         reply = await getTaskInfo();
         continue;
       }

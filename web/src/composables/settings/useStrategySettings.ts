@@ -41,6 +41,7 @@ export function useStrategySettings({
     prioritizeGrowthTasks: false,
     bagSeedPriority: [] as number[],
     bagSeedKnownIds: [] as number[],
+    bagSeedExcludedIds: [] as number[],
     bagSeedFallbackStrategy: 'level',
     intervals: { farmMin: 2, farmMax: 5, helpMin: 10, helpMax: 15 },
     friendQuietHours: { enabled: false, start: '23:00', end: '07:00' },
@@ -71,10 +72,6 @@ export function useStrategySettings({
 
   watchEffect(async () => {
     const requestId = ++strategyPreviewRequestId
-    if (localStrategySettings.value.onlyPlant2x2) {
-      strategyPreviewLabel.value = '背包 2×2 种子'
-      return
-    }
     let strategy = localStrategySettings.value.plantingStrategy
     if (strategy === 'bag_priority' || strategy === 'task_priority') {
       strategy = localStrategySettings.value.bagSeedFallbackStrategy || 'level'
@@ -143,6 +140,7 @@ export function useStrategySettings({
         prioritizeGrowthTasks: settings.value.prioritizeGrowthTasks === true,
         bagSeedPriority: settings.value.bagSeedPriority ?? [],
         bagSeedKnownIds: settings.value.bagSeedKnownIds ?? [],
+        bagSeedExcludedIds: settings.value.bagSeedExcludedIds ?? [],
         bagSeedFallbackStrategy: settings.value.bagSeedFallbackStrategy ?? 'level',
         intervals: settings.value.intervals,
         friendQuietHours: settings.value.friendQuietHours,

@@ -166,11 +166,14 @@ watch([currentAccountId, illustratedType], () => {
 onMounted(() => {
   refreshList(false)
 })
+
+// 作为「我的农场」页签嵌入时隐藏页面级标题（由外层统一提供）
+const props = defineProps<{ embedded?: boolean }>()
 </script>
 
 <template>
   <section class="illustrated-page space-y-4">
-    <FarmPageHeader scene title="收藏图鉴" description="把每一次发现，收藏成庄园的成长印记。" icon="i-carbon-book" />
+    <FarmPageHeader v-if="!props.embedded" scene title="收藏图鉴" description="把每一次发现，收藏成庄园的成长印记。" icon="i-carbon-book" />
     <div class="illustrated-body">
       <div class="illustrated-intro">
         <div class="illustrated-summary">

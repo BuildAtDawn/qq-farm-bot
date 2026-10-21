@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { getGrowthPlantingNeeds, plantGrowthTasks } = require('../src/services/growth-planting');
+const { getGrowthPlantingNeeds, plantGrowthTasks, buyGrowthTaskSeeds } = require('../src/services/growth-planting');
 const task = (overrides = {}) => ({ id: 100003, is_unlocked: true, is_claimed: false, progress: 2, total_progress: 6, ...overrides });
 
 test('only verified unlocked unfinished planting tasks produce needs', () => {
@@ -8,7 +8,43 @@ test('only verified unlocked unfinished planting tasks produce needs', () => {
     task(), task({ is_unlocked: false }), task({ is_claimed: true }),
     task({ id: 9999 }), task({ id: 100004 }), task({ progress: 6 }),
     task({ total_progress: 0 }), task({ progress: -1 }),
-  ]), [{ seedId: 20003, count: 4 }]);
+  ]), [{ seedId: 20003, count: 4, actions: ['plant'] }]);
+});
+
+test('buy-type tasks carry their action and stay out of the plant path', () => {
+  const needs = getGrowthPlantingNeeds([
+    { id: 100019, is_unlocked: true, is_claimed: false, progress: 0, total_progress: 7 },
+    task(),
+  ]);
+  assert.deepEqual(needs, [
+    { seedId: 20064, count: 7, actions: ['buy'] },
+    { seedId: 20003, count: 4, actions: ['plant'] },
+  ]);
+});
+
+test('buyGrowthTaskSeeds purchases remaining seeds without needing free land', async () => {
+  const calls = [];
+  const bought = await buyGrowthTaskSeeds({
+    getTasks: async () => [
+      { id: 100019, is_unlocked: true, is_claimed: false, progress: 3, total_progress: 7 },
+    ],
+    getBagSeeds: async () => [{ seedId: 20064, count: 0 }],
+    buySeed: async (seedId, count) => { calls.push({ seedId, count }); return count; },
+  });
+  assert.deepEqual(bought, [{ seedId: 20064, count: 4 }]);
+  assert.deepEqual(calls, [{ seedId: 20064, count: 4 }]);
+});
+
+test('buyGrowthTaskSeeds skips plant-type tasks and survives purchase failure', async () => {
+  const bought = await buyGrowthTaskSeeds({
+    getTasks: async () => [
+      task(),
+      { id: 100019, is_unlocked: true, is_claimed: false, progress: 0, total_progress: 7 },
+    ],
+    getBagSeeds: async () => [],
+    buySeed: async (seedId) => { if (seedId === 20064) throw new Error('gold insufficient'); return 0; },
+  });
+  assert.deepEqual(bought, []);
 });
 
 function setup(tasks = [task()], owned = 2) {
