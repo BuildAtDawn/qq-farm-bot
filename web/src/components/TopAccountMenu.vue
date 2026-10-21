@@ -213,7 +213,9 @@ function updateDropdownPos() {
 
 function onMenuFocusout(event: FocusEvent) {
   const next = event.relatedTarget as Node | null
-  if (!menuSurface.value?.contains(next) && !triggerRef.value?.contains(next))
+  // Touch taps can blur a button without focusing the next one, before click fires.
+  // Keep that target mounted; the backdrop handles taps outside the menu.
+  if (next && !menuSurface.value?.contains(next) && !triggerRef.value?.contains(next))
     showAccountDropdown.value = false
 }
 
