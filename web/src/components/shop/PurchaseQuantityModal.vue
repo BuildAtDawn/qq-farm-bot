@@ -306,10 +306,6 @@ useModalFocus(() => props.show, modalSurface, closeModal)
 }
 
 @media (max-width: 480px) {
-  .purchase-modal-overlay {
-    align-items: flex-end;
-  }
-
   .purchase-modal {
     padding: 24px 22px 22px;
   }

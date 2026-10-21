@@ -285,6 +285,8 @@ function createDataProvider(deps) {
         getMilkTea: ref => callWorkerApi(resolveAccountId(ref), 'getMilkTea'),
         operateMilkTea: (ref, action, params) => callWorkerApi(resolveAccountId(ref), 'operateMilkTea', action, params || {}),
         milkTeaRecords: (ref, kind, params) => callWorkerApi(resolveAccountId(ref), 'milkTeaRecords', kind, params || {}),
+        getGiftAssistant: (ref) => callWorkerApi(resolveAccountId(ref), 'getGiftAssistant'),
+        runGiftAssistant: (ref) => callWorkerApi(resolveAccountId(ref), 'runGiftAssistant', undefined),
         getPetDiaryActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getPetDiaryActivity'),
         getPetDiary: (ref) => callWorkerApi(resolveAccountId(ref), 'getPetDiary'),
         operatePetDiary: (ref, action, params) => callWorkerApi(resolveAccountId(ref), 'operatePetDiary', action, params || {}),
