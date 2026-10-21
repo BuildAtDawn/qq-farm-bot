@@ -213,11 +213,9 @@ function updateDropdownPos() {
 
 function onMenuFocusout(event: FocusEvent) {
   const next = event.relatedTarget as Node | null
-  // 移动端 tap 不会转移键盘焦点（relatedTarget 为 null），此时关闭下拉会导致
-  // click 永远到不了账号项（手机端无法切换账号的根因）。外点关闭由遮罩层 click 兜底。
-  if (!next)
-    return
-  if (!menuSurface.value?.contains(next) && !triggerRef.value?.contains(next))
+  // Touch taps can blur a button without focusing the next one, before click fires.
+  // Keep that target mounted; the backdrop handles taps outside the menu.
+  if (next && !menuSurface.value?.contains(next) && !triggerRef.value?.contains(next))
     showAccountDropdown.value = false
 }
 
