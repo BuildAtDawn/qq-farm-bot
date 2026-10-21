@@ -339,6 +339,7 @@ function createDataProvider(deps) {
                 autoAcceptFriendMinLevel: s.autoAcceptFriendMinLevel,
                 bagSeedPriority: s.bagSeedPriority,
                 bagSeedKnownIds: s.bagSeedKnownIds,
+                bagSeedExcludedIds: s.bagSeedExcludedIds,
                 bagSeedFallbackStrategy: s.bagSeedFallbackStrategy,
             };
             store.applyConfigSnapshot(patch, { accountId: id });
@@ -361,6 +362,7 @@ function createDataProvider(deps) {
                 goldenBugRoundLimit: store.getConfigSnapshot(id).goldenBugRoundLimit,
                 autoAcceptFriendMinLevel: store.getAutoAcceptFriendMinLevel(id),
                 bagSeedPriority: store.getBagSeedPriority(id),
+                bagSeedExcludedIds: store.getConfigSnapshot(id).bagSeedExcludedIds || [],
                 bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(id),
                 configRevision: rev
             };
