@@ -250,6 +250,8 @@ async function loadProto() {
     types.BatchClaimTaskRewardReply = root.lookupType('gamepb.taskpb.BatchClaimTaskRewardReply');
     types.ClaimDailyRewardRequest = root.lookupType('gamepb.taskpb.ClaimDailyRewardRequest');
     types.ClaimDailyRewardReply = root.lookupType('gamepb.taskpb.ClaimDailyRewardReply');
+    types.ClientReportProgressRequest = root.lookupType('gamepb.taskpb.ClientReportProgressRequest');
+    types.ClientReportProgressReply = root.lookupType('gamepb.taskpb.ClientReportProgressReply');
 
     // 邮箱
     types.GetEmailListRequest = root.lookupType('gamepb.emailpb.GetEmailListRequest');
