@@ -2,29 +2,11 @@
 import { ref } from 'vue'
 import BagPanel from '@/components/BagPanel.vue'
 import FarmPanel from '@/components/FarmPanel.vue'
-import Illustrated from '@/views/Illustrated.vue'
 import PersonalAccountOverview from '@/components/PersonalAccountOverview.vue'
-import Pet from '@/views/Pet.vue'
 import TaskPanel from '@/components/TaskPanel.vue'
 import FarmPageHeader from '@/components/ui/FarmPageHeader.vue'
 
-type PersonalTab = 'farm' | 'bag' | 'pet' | 'illustrated' | 'task'
-
-const currentTab = ref<PersonalTab>('farm')
-const tabComponents: Record<PersonalTab, any> = {
-  farm: FarmPanel,
-  bag: BagPanel,
-  pet: Pet,
-  illustrated: Illustrated,
-  task: TaskPanel,
-}
-const tabs: { key: PersonalTab, label: string, icon: string }[] = [
-  { key: 'farm', label: '我的农场', icon: 'i-carbon-sprout' },
-  { key: 'bag', label: '我的背包', icon: 'i-carbon-box' },
-  { key: 'pet', label: '宠物小屋', icon: 'i-fa-solid-paw' },
-  { key: 'illustrated', label: '收藏图鉴', icon: 'i-carbon-book' },
-  { key: 'task', label: '我的任务', icon: 'i-carbon-task' },
-]
+const currentTab = ref<'farm' | 'bag' | 'task'>('farm')
 </script>
 
 <template>
@@ -33,15 +15,36 @@ const tabs: { key: PersonalTab, label: string, icon: string }[] = [
     <PersonalAccountOverview />
     <div class="personal-tabs" role="tablist" aria-label="个人板块">
       <button
-        v-for="tab in tabs" :key="tab.key"
         class="personal-tab" role="tab"
-        :class="{ 'is-active': currentTab === tab.key }"
-        :aria-selected="currentTab === tab.key"
-        @click="currentTab = tab.key"
+        :class="{ 'is-active': currentTab === 'farm' }"
+        :aria-selected="currentTab === 'farm'"
+        @click="currentTab = 'farm'"
       >
-        <div class="flex items-center gap-1.5">
-          <div :class="tab.icon" class="text-lg" />
-          <span>{{ tab.label }}</span>
+        <div class="flex items-center space-x-2">
+          <div class="i-carbon-sprout text-lg" />
+          <span>我的农场</span>
+        </div>
+      </button>
+      <button
+        class="personal-tab" role="tab"
+        :class="{ 'is-active': currentTab === 'bag' }"
+        :aria-selected="currentTab === 'bag'"
+        @click="currentTab = 'bag'"
+      >
+        <div class="flex items-center space-x-2">
+          <div class="i-carbon-box text-lg" />
+          <span>我的背包</span>
+        </div>
+      </button>
+      <button
+        class="personal-tab" role="tab"
+        :class="{ 'is-active': currentTab === 'task' }"
+        :aria-selected="currentTab === 'task'"
+        @click="currentTab = 'task'"
+      >
+        <div class="flex items-center space-x-2">
+          <div class="i-carbon-task text-lg" />
+          <span>我的任务</span>
         </div>
       </button>
     </div>
@@ -56,7 +59,7 @@ const tabs: { key: PersonalTab, label: string, icon: string }[] = [
         leave-from-class="transform opacity-100 scale-100"
         leave-to-class="transform opacity-0 scale-95"
       >
-        <component :is="tabComponents[currentTab]" />
+        <component :is="currentTab === 'farm' ? FarmPanel : currentTab === 'bag' ? BagPanel : TaskPanel" />
       </Transition>
     </div>
   </div>
@@ -100,25 +103,11 @@ const tabs: { key: PersonalTab, label: string, icon: string }[] = [
   .personal-page {
     gap: 14px;
   }
-  /* 手机端 5 个 Tab 等分一行：不横向滚动、不超出框 */
   .personal-tabs {
-    gap: 0;
-    overflow-x: visible;
+    gap: 20px;
   }
   .personal-tab {
-    flex: 1 1 0;
-    min-width: 0;
-    justify-content: center;
-    min-height: 40px;
-    padding: 8px 0 10px;
-    font-size: 11px;
-  }
-  .personal-tab > div {
-    gap: 3px;
-  }
-  .personal-tab .text-lg {
-    width: 14px;
-    height: 14px;
+    font-size: 12px;
   }
 }
 </style>

@@ -8,6 +8,7 @@ const {
   syncBagSeedPriority,
   getBagSeedFallbackStrategy,
   getPrioritize2x2Crops,
+  getOnlyPlant2x2,
   getPrioritizeGrowthTasks,
 } = require('../models/store');
 const { getPlantRankings } = require('./analytics');
@@ -324,7 +325,8 @@ async function plant2x2Seed(seedId, group) {
 }
 
 async function plantPrioritized2x2Crops(emptyLandIds, lands, accountId) {
-  if (!getPrioritize2x2Crops(accountId)) {
+  const only2x2 = getOnlyPlant2x2(accountId);
+  if (!only2x2 && !getPrioritize2x2Crops(accountId)) {
     reserved2x2GroupKeys = [];
     last2x2WaitingSignature = '';
     return { reservedLandIds: [], plantedMasterIds: [], plantedCount: 0, occupiedCount: 0 };
@@ -334,7 +336,7 @@ async function plantPrioritized2x2Crops(emptyLandIds, lands, accountId) {
   try {
     bagSeeds = await getBagSeeds();
   } catch (err) {
-    logWarn('种植', `读取四格种子失败，继续普通种植: ${err.message}`, {
+    logWarn('种植', `读取四格种子失败，${only2x2 ? '本轮停止种植' : '继续普通种植'}: ${err.message}`, {
       module: 'farm',
       event: '读取2x2种子',
       result: 'error',
@@ -343,22 +345,10 @@ async function plantPrioritized2x2Crops(emptyLandIds, lands, accountId) {
   }
   const userState = getUserState();
   const userLevel = Number(userState && userState.level) || 0;
-  // 2x2 种子与 1x1 共用同一份背包优先级顺序；被移除（排除）的种子不参与种植。
-  const syncedPriority = syncBagSeedPriority(accountId, bagSeeds, { persist: false });
-  if (syncedPriority.changed && typeof process.send === 'function') {
-    try {
-      process.send({
-        type: 'bag_seed_priority_sync',
-        priority: syncedPriority.priority,
-        knownIds: syncedPriority.knownIds,
-      });
-    } catch { }
-  }
-  const excludedSet = new Set(syncedPriority.excluded || []);
-  const sortedSize2Seeds = sortBagSeedsForPlanting(
-    syncedPriority.seeds.filter(seed => (Number(seed.plantSize) || 1) === 2 && !excludedSet.has(seed.seedId)),
-    syncedPriority.priority
-  ).map(seed => ({ ...seed, count: Number(seed.count) || 0 }));
+  const sortedSize2Seeds = bagSeeds
+    .filter(seed => Number(seed?.count) > 0 && Number(seed?.plantSize) === 2)
+    .sort(compareBagSeedGameOrder)
+    .map(seed => ({ ...seed, count: Number(seed.count) || 0 }));
   const lockedByLevelSeeds = sortedSize2Seeds.filter(seed => isSeedLockedByLevel(seed, userLevel));
   const size2Seeds = sortedSize2Seeds.filter(seed => !isSeedLockedByLevel(seed, userLevel));
 
@@ -380,7 +370,8 @@ async function plantPrioritized2x2Crops(emptyLandIds, lands, accountId) {
   }
 
   const emptySet = new Set((emptyLandIds || []).map(toNum).filter(Boolean));
-  const groups = build2x2LandGroups(lands);
+  const groups = build2x2LandGroups(lands)
+    .filter(group => !only2x2 || group.landIds.every(id => emptySet.has(id)));
   const reservations = select2x2Reservations(
     groups,
     emptyLandIds,
@@ -613,13 +604,10 @@ async function plantFromBagSeeds(emptyLandIds, accountId = getCurrentAccountId()
     } catch { }
   }
   const seedPriority = syncedPriority.priority;
-  const excludedSet = new Set(syncedPriority.excluded || []);
 
   // The synchronized list is the same order shown in the settings page.
-  // 1x1 planter only consumes single-cell seeds; 2x2 crops are reserved by
-  // plantPrioritized2x2Crops. Excluded (removed) seeds never plant.
   const availableSeeds = sortBagSeedsForPlanting(
-    syncedPriority.seeds.filter(seed => (Number(seed.plantSize) || 1) === 1 && !excludedSet.has(seed.seedId)),
+    syncedPriority.seeds,
     seedPriority
   );
 
@@ -951,13 +939,15 @@ async function autoPlantEmptyLands(deadLandIds, emptyLandIds, lands = []) {
   }
 
   allEmptyLands = expandRemoved2x2Lands(allEmptyLands, removedLandIds, lands);
+  const only2x2 = getOnlyPlant2x2(accountId);
+  if (only2x2 && allEmptyLands.length === 0) return result;
   const strategy = String(getPlantingStrategy(accountId) || '').trim();
-  const growthTaskPriorityEnabled = strategy === 'task_priority' || getPrioritizeGrowthTasks(accountId);
-  if (growthTaskPriorityEnabled) {
+  const growthTaskPriorityEnabled = !only2x2 && (strategy === 'task_priority' || getPrioritizeGrowthTasks(accountId));
+  if (allEmptyLands.length && growthTaskPriorityEnabled) {
     try {
       const { getTaskInfo, buildGrowthTasks } = require('./task');
-      const { plantGrowthTasks, buyGrowthTaskSeeds } = require('./growth-planting');
-      const growthDeps = {
+      const { plantGrowthTasks } = require('./growth-planting');
+      const taskResult = await plantGrowthTasks(allEmptyLands, {
         getTasks: async () => {
           const reply = await getTaskInfo();
           if (!reply.task_info) throw new Error('任务响应缺少任务信息');
@@ -988,30 +978,16 @@ async function autoPlantEmptyLands(deadLandIds, emptyLandIds, lands = []) {
           const owned = Number(bag.find(seed => Number(seed.seedId) === seedId)?.count) || 0;
           return Math.min(buyCount, Math.max(0, owned - previousOwned));
         },
-      };
-      // ① 购买类成长任务（如「购买7个大葱种子」）：进度只由购买动作驱动，与种植/空地无关，
-      //    不依赖空地也要执行，否则农场种满后这类任务永远无法推进。
-      try {
-        const bought = await buyGrowthTaskSeeds(growthDeps);
-        if (bought.length) {
-          log('成长种植', `已为购买类任务补购种子: ${bought.map(item => `${item.seedId} x${item.count}`).join(', ')}`);
-        }
-      } catch (error) {
-        logWarn('成长种植', `购买类任务处理失败，下轮重试: ${error.message}`);
+      });
+      allEmptyLands = taskResult.remainingLandIds;
+      result.plantedLands.push(...taskResult.plantedLandIds);
+      result.plantedCount += taskResult.plantedLandIds.length;
+      result.occupiedCount += taskResult.plantedLandIds.length;
+      if (taskResult.plantedLandIds.length) {
+        log('成长种植', `已优先种植 ${taskResult.plantedLandIds.length} 块任务作物`);
+        await runFertilizerByConfig(taskResult.plantedLandIds);
       }
-      // ② 种植类成长任务：有空地时优先种植任务作物
-      if (allEmptyLands.length) {
-        const taskResult = await plantGrowthTasks(allEmptyLands, growthDeps);
-        allEmptyLands = taskResult.remainingLandIds;
-        result.plantedLands.push(...taskResult.plantedLandIds);
-        result.plantedCount += taskResult.plantedLandIds.length;
-        result.occupiedCount += taskResult.plantedLandIds.length;
-        if (taskResult.plantedLandIds.length) {
-          log('成长种植', `已优先种植 ${taskResult.plantedLandIds.length} 块任务作物`);
-          await runFertilizerByConfig(taskResult.plantedLandIds);
-        }
-        if (!allEmptyLands.length) return result;
-      }
+      if (!allEmptyLands.length) return result;
     } catch (error) {
       logWarn('成长种植', `任务种植中断，下轮重试: ${error.message}`);
       return result;
@@ -1028,6 +1004,8 @@ async function autoPlantEmptyLands(deadLandIds, emptyLandIds, lands = []) {
   if (size2Result.plantedMasterIds.length > 0) {
     await runFertilizerByConfig(size2Result.plantedMasterIds);
   }
+
+  if (only2x2) return result;
 
   if (allEmptyLands.length === 0) return result;
   if (normalEmptyLands.length === 0) return result;

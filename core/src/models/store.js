@@ -264,7 +264,6 @@ const DEFAULT_AUTOMATION = {
     friend_golden_bug: false,
     task: true,
     task_after_farm: false,
-    gift_assistant: true,
     star_passport_claim: false,
     star_solar_claim: false,
     star_solar_quiz_claim: false,
@@ -496,7 +495,6 @@ const DEFAULT_ACCOUNT_CONFIG = {
     fertilizerBuyCheckIntervalMinutes: 60,
     bagSeedPriority: [],
     bagSeedKnownIds: [],
-    bagSeedExcludedIds: [],
     bagSeedFallbackStrategy: 'level',
     autoAcceptFriendMinLevel: 0,
     goldenBugKeepCount: 0,
@@ -534,7 +532,6 @@ function normalizeBagSeedPriority(rawList) {
 
 function syncBagSeedPriority(accountId, bagSeeds, options = {}) {
     const cfg = getAccountConfigSnapshot(accountId);
-    // 统一优先级列表：1x1 与 2x2 种子共用同一份顺序，用户移除（排除）的种子不参与种植。
     const currentSeeds = (Array.isArray(bagSeeds) ? bagSeeds : [])
         .map(seed => ({
             ...seed,
@@ -546,14 +543,12 @@ function syncBagSeedPriority(accountId, bagSeeds, options = {}) {
             plantingPriority: Number(seed && seed.plantingPriority) || 0,
             plantSize: Number(seed && seed.plantSize) || 1,
         }))
-        .filter(seed => seed.seedId > 0 && seed.count > 0)
+        .filter(seed => seed.seedId > 0 && seed.count > 0 && seed.plantSize === 1)
         .sort(compareBagSeedGameOrder);
     const currentIds = currentSeeds.map(seed => seed.seedId);
-    const excluded = normalizeBagSeedPriority(cfg.bagSeedExcludedIds);
-    const excludedSet = new Set(excluded);
-    const priority = normalizeBagSeedPriority(cfg.bagSeedPriority).filter(id => !excludedSet.has(id));
+    const priority = normalizeBagSeedPriority(cfg.bagSeedPriority);
     const knownIds = normalizeBagSeedPriority(cfg.bagSeedKnownIds);
-    const nextPriority = [...priority, ...currentIds.filter(id => !priority.includes(id) && !excludedSet.has(id))];
+    const nextPriority = [...priority, ...currentIds.filter(id => !priority.includes(id))];
 
     const nextKnownIds = [...new Set([...knownIds, ...priority, ...currentIds])];
     const changed = JSON.stringify(nextPriority) !== JSON.stringify(priority)
@@ -572,7 +567,6 @@ function syncBagSeedPriority(accountId, bagSeeds, options = {}) {
         seeds: currentSeeds,
         priority: nextPriority,
         knownIds: nextKnownIds,
-        excluded,
         changed,
     };
 }
@@ -749,7 +743,6 @@ function cloneAccountConfig(config = DEFAULT_ACCOUNT_CONFIG) {
         goldenBugRoundLimit: Math.max(1, Math.min(100, Number(config.goldenBugRoundLimit) || 24)),
         bagSeedPriority: normalizeBagSeedPriority(config.bagSeedPriority),
         bagSeedKnownIds: normalizeBagSeedPriority(config.bagSeedKnownIds),
-        bagSeedExcludedIds: normalizeBagSeedPriority(config.bagSeedExcludedIds),
         bagSeedFallbackStrategy: normalizeBagSeedFallbackStrategy(config.bagSeedFallbackStrategy),
         capitalMode: normalizeCapitalMode(config.capitalMode)
     };
@@ -954,9 +947,6 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
     }
     if (input.bagSeedKnownIds !== undefined && input.bagSeedKnownIds !== null) {
         cfg.bagSeedKnownIds = normalizeBagSeedPriority(input.bagSeedKnownIds);
-    }
-    if (input.bagSeedExcludedIds !== undefined && input.bagSeedExcludedIds !== null) {
-        cfg.bagSeedExcludedIds = normalizeBagSeedPriority(input.bagSeedExcludedIds);
     }
 
     // 背包种子回退策略
@@ -1340,7 +1330,6 @@ function getConfigSnapshot(accountId) {
         goldenBugRoundLimit: Math.max(1, Math.min(100, Number(cfg.goldenBugRoundLimit) || 24)),
         bagSeedPriority: [...cfg.bagSeedPriority || []],
         bagSeedKnownIds: [...cfg.bagSeedKnownIds || []],
-        bagSeedExcludedIds: [...cfg.bagSeedExcludedIds || []],
         bagSeedFallbackStrategy: cfg.bagSeedFallbackStrategy,
         systemSettings: getSystemSettings(),
         ui
@@ -1467,9 +1456,6 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
     }
     if (patch.bagSeedKnownIds !== undefined && patch.bagSeedKnownIds !== null) {
         cfg.bagSeedKnownIds = normalizeBagSeedPriority(patch.bagSeedKnownIds);
-    }
-    if (patch.bagSeedExcludedIds !== undefined && patch.bagSeedExcludedIds !== null) {
-        cfg.bagSeedExcludedIds = normalizeBagSeedPriority(patch.bagSeedExcludedIds);
     }
     if (patch.bagSeedFallbackStrategy !== undefined && patch.bagSeedFallbackStrategy !== null) {
         cfg.bagSeedFallbackStrategy = normalizeBagSeedFallbackStrategy(patch.bagSeedFallbackStrategy);

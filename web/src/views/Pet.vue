@@ -6,73 +6,19 @@ import BaseSwitch from '@/components/ui/BaseSwitch.vue'
 import FarmPageHeader from '@/components/ui/FarmPageHeader.vue'
 import { useAccountStore } from '@/stores/account'
 import { usePetStore } from '@/stores/pet'
-import { useShopStore } from '@/stores/shop'
 import { useToastStore } from '@/stores/toast'
-import PurchaseQuantityModal from '@/components/shop/PurchaseQuantityModal.vue'
 
 type PetTab = 'pets' | 'logs' | 'capital'
 
 const accountStore = useAccountStore()
 const petStore = usePetStore()
 const toast = useToastStore()
-const shopStore = useShopStore()
 const { currentAccountId } = storeToRefs(accountStore)
 const { overview, logs, capitalMode, loading, mutating } = storeToRefs(petStore)
-const { mallGoods } = storeToRefs(shopStore)
 const tab = ref<PetTab>('pets')
 const feedCounts = reactive<Record<number, number>>({})
 const draft = reactive({ enabled: false, dogId: 0, leadSeconds: 10 })
 const saving = ref(false)
-
-// 狗粮礼包（商城点券商品 goodsId=1006）直接购买
-const DOG_FOOD_GIFT_GOODS_ID = 1006
-const dogFoodGift = computed(() => mallGoods.value.find(item => Number(item.goodsId) === DOG_FOOD_GIFT_GOODS_ID))
-const giftModalShow = ref(false)
-const giftBuying = ref(false)
-const giftMaxQuantity = computed(() => {
-  const gift = dogFoodGift.value
-  if (!gift)
-    return 1
-  const limited = Number(gift.limitCount) > 0 ? Math.max(0, Number(gift.limitCount) - Number(gift.boughtNum || 0)) : 99
-  const affordable = Number(gift.price) > 0 && !gift.isFree
-    ? Math.floor(Number(gift.currencyBalance || 0) / Number(gift.price))
-    : 99
-  return Math.max(1, Math.min(99, limited, affordable))
-})
-
-function openGiftBuy() {
-  if (!dogFoodGift.value)
-    return
-  giftModalShow.value = true
-}
-
-function closeGiftBuy() {
-  giftModalShow.value = false
-}
-
-async function confirmGiftBuy(quantity: number) {
-  const accountId = String(currentAccountId.value || '')
-  if (!accountId)
-    return
-  giftBuying.value = true
-  try {
-    const result = await shopStore.buyMallGoods(accountId, DOG_FOOD_GIFT_GOODS_ID, quantity)
-    if (result?.ok) {
-      toast.success(`已购买 狗粮礼包 x${quantity}`)
-      giftModalShow.value = false
-      await Promise.all([shopStore.fetchMall(accountId), load()])
-    }
-    else {
-      toast.error(result?.error || '购买失败')
-    }
-  }
-  catch (e: any) {
-    toast.error(e?.response?.data?.error || e?.message || '购买失败')
-  }
-  finally {
-    giftBuying.value = false
-  }
-}
 
 const tabs: { key: PetTab, label: string, icon: string }[] = [
   { key: 'pets', label: '宠物管理', icon: 'i-carbon-dog-walker' },
@@ -153,26 +99,13 @@ async function saveSettings() {
   }
 }
 
-watch([currentAccountId, tab], () => {
-  load()
-  const id = String(currentAccountId.value || '')
-  if (id)
-    shopStore.fetchMall(id).catch(() => null)
-})
-onMounted(() => {
-  load()
-  const id = String(currentAccountId.value || '')
-  if (id)
-    shopStore.fetchMall(id).catch(() => null)
-})
-
-// 作为「我的农场」页签嵌入时隐藏页面级标题（由外层统一提供）
-const props = defineProps<{ embedded?: boolean }>()
+watch([currentAccountId, tab], load)
+onMounted(load)
 </script>
 
 <template>
   <section class="pet-page flex flex-col gap-3 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-hidden">
-    <FarmPageHeader v-if="!props.embedded" scene title="宠物小屋" description="照顾守护伙伴，备好每一天的补给。" icon="i-fas-paw">
+    <FarmPageHeader scene title="宠物小屋" description="照顾守护伙伴，备好每一天的补给。" icon="i-fas-paw">
       <BaseButton variant="secondary" size="sm" :loading="loading" :disabled="mutating || !currentAccountId" aria-label="刷新宠物数据" @click="load">
         <span v-if="!loading" class="i-carbon-renew mr-1" />刷新
       </BaseButton>
@@ -332,8 +265,7 @@ const props = defineProps<{ embedded?: boolean }>()
             暂无狗粮数据
           </div>
           <div v-else class="food-list p-3 pt-2 lg:min-h-0 lg:flex-1 space-y-2 lg:overflow-y-auto sm:p-4 sm:pt-2">
-            <template v-for="food in overview.foods" :key="food.id">
-            <article class="food-card border border-gray-200 rounded-lg p-2.5 dark:border-gray-700">
+            <article v-for="food in overview.foods" :key="food.id" class="food-card border border-gray-200 rounded-lg p-2.5 dark:border-gray-700">
               <div class="min-w-0 flex items-center gap-2.5">
                 <div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-gray-50 dark:bg-gray-700/60">
                   <img v-if="food.image" :src="food.image" :alt="food.name" loading="lazy" class="h-10 w-10 object-contain">
@@ -352,7 +284,7 @@ const props = defineProps<{ embedded?: boolean }>()
                 </div>
               </div>
               <div class="mt-2 flex items-center gap-2">
-                <div class="h-8 flex flex-1 min-w-0 items-center overflow-hidden border border-gray-200 rounded-md dark:border-gray-600">
+                <div class="h-8 flex flex-1 items-center overflow-hidden border border-gray-200 rounded-md dark:border-gray-600">
                   <button type="button" class="grid h-full w-8 shrink-0 place-items-center text-gray-500 hover:bg-gray-100 dark:text-gray-300 disabled:opacity-35 dark:hover:bg-gray-700" :disabled="!food.count || mutating || getFeedCount(food.id) <= 1" :aria-label="`减少${food.name}数量`" @click="setFeedCount(food.id, getFeedCount(food.id) - 1, food.count)">
                     <span class="i-carbon-subtract" />
                   </button>
@@ -363,7 +295,7 @@ const props = defineProps<{ embedded?: boolean }>()
                     min="1"
                     :max="Math.min(food.count, 99)"
                     :aria-label="`${food.name}喂食数量`"
-                    class="h-full min-w-0 w-full flex-1 appearance-none border-x border-y-0 border-gray-200 bg-transparent px-1 text-center text-sm font-medium text-gray-900 outline-none dark:border-gray-600 focus:border-[var(--theme-primary)] dark:text-gray-100"
+                    class="h-full min-w-0 w-full border-x border-y-0 border-gray-200 bg-transparent px-1 text-center text-xs text-gray-900 outline-none dark:border-gray-600 focus:border-[var(--theme-primary)] dark:text-gray-100"
                     :disabled="!food.count || mutating"
                     @input="setFeedCount(food.id, Number(($event.target as HTMLInputElement).value), food.count)"
                   >
@@ -376,35 +308,6 @@ const props = defineProps<{ embedded?: boolean }>()
                 </BaseButton>
               </div>
             </article>
-            <div
-              v-if="food.days === 5"
-              class="food-card w-full cursor-pointer border border-dashed border-gray-300 rounded-lg p-2.5 text-left transition hover:border-[var(--theme-primary)] dark:border-gray-600"
-              @click="openGiftBuy"
-            >
-              <div class="min-w-0 flex items-center gap-2.5">
-                <div class="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-md bg-gray-50 dark:bg-gray-700/60">
-                  <img v-if="dogFoodGift?.images?.length" :src="dogFoodGift.images[0]" alt="狗粮礼包" loading="lazy" class="h-10 w-10 object-contain">
-                  <span v-else class="i-carbon-shopping-cart text-lg text-gray-500 dark:text-gray-300" />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center justify-between gap-2">
-                    <h3 class="truncate text-sm text-gray-900 font-medium dark:text-gray-100">{{ dogFoodGift?.name || '狗粮礼包' }}</h3>
-                    <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
-                      {{ dogFoodGift ? (dogFoodGift.isFree ? '免费' : `${dogFoodGift.price} ${dogFoodGift.currencyName || '点券'}`) : '点券商城' }}
-                    </span>
-                  </div>
-                  <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                    购买 1/3/5 天狗粮礼包
-                  </p>
-                </div>
-              </div>
-              <div class="mt-2 flex items-center justify-end">
-                <BaseButton size="sm" class="h-8 shrink-0 px-3!">
-                  购买
-                </BaseButton>
-              </div>
-            </div>
-            </template>
           </div>
         </section>
       </div>
@@ -510,21 +413,6 @@ const props = defineProps<{ embedded?: boolean }>()
       </div>
     </section>
   </section>
-
-  <PurchaseQuantityModal
-    :show="giftModalShow"
-    title="购买狗粮礼包"
-    :item-name="dogFoodGift?.name || '狗粮礼包'"
-    :unit-price="Number(dogFoodGift?.price || 0)"
-    :currency-label="dogFoodGift?.currencyName || '点券'"
-    :balance="Number(dogFoodGift?.currencyBalance || 0)"
-    :max-quantity="giftMaxQuantity"
-    :loading="giftBuying"
-    :is-free="!!dogFoodGift?.isFree"
-    @confirm="confirmGiftBuy"
-    @close="closeGiftBuy"
-    @cancel="closeGiftBuy"
-  />
 </template>
 
 <style scoped>
@@ -623,7 +511,55 @@ select:focus-visible {
     margin-top: 0.375rem;
   }
 
-  /* 喂食补给：手机端与 PC 端同布局（全宽卡片、步进器拉长），不再压缩为窄双列 */
+  .food-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .food-card > :first-child {
+    gap: 0.375rem;
+  }
+
+  .food-card > :first-child > :first-child {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .food-card > :first-child > :first-child img {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .food-card > :last-child {
+    width: 8.75rem;
+    margin-top: 0;
+    gap: 0.375rem;
+  }
+
+  .food-card > :last-child > :first-child {
+    height: 1.75rem;
+  }
+
+  .food-card .food-duration {
+    display: none;
+  }
+
+  .food-card > :first-child > :last-child > div {
+    display: block;
+  }
+
+  .food-card > :first-child > :last-child > div > span {
+    display: block;
+    margin-top: 0.125rem;
+    font-size: 0.625rem;
+  }
+
+  .food-card h3 {
+    font-size: 0.75rem;
+  }
 
   .guardian-strip {
     min-height: 0;

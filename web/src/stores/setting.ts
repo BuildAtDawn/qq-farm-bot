@@ -166,7 +166,6 @@ export interface SettingsState {
   prioritizeGrowthTasks: boolean
   bagSeedPriority: number[]
   bagSeedKnownIds: number[]
-  bagSeedExcludedIds: number[]
   bagSeedFallbackStrategy: string
   autoAcceptFriendMinLevel: number
   intervals: IntervalsConfig
@@ -240,7 +239,6 @@ export const useSettingStore = defineStore('setting', () => {
     prioritizeGrowthTasks: false,
     bagSeedPriority: [],
     bagSeedKnownIds: [],
-    bagSeedExcludedIds: [],
     bagSeedFallbackStrategy: 'level',
     autoAcceptFriendMinLevel: 0,
     intervals: {},
@@ -275,7 +273,6 @@ export const useSettingStore = defineStore('setting', () => {
       prioritizeGrowthTasks: false,
       bagSeedPriority: [],
       bagSeedKnownIds: [],
-      bagSeedExcludedIds: [],
       bagSeedFallbackStrategy: 'level',
       autoAcceptFriendMinLevel: 0,
       intervals: {},
@@ -334,7 +331,6 @@ export const useSettingStore = defineStore('setting', () => {
         settings.value.goldenBugRoundLimit = d.goldenBugRoundLimit ?? 24
         settings.value.bagSeedPriority = d.bagSeedPriority ?? []
         settings.value.bagSeedKnownIds = d.bagSeedKnownIds ?? []
-        settings.value.bagSeedExcludedIds = d.bagSeedExcludedIds ?? []
         settings.value.bagSeedFallbackStrategy = d.bagSeedFallbackStrategy ?? 'level'
       }
     }
@@ -356,7 +352,6 @@ export const useSettingStore = defineStore('setting', () => {
         prioritizeGrowthTasks: newSettings.prioritizeGrowthTasks === true,
         bagSeedPriority: newSettings.bagSeedPriority ?? [],
         bagSeedKnownIds: newSettings.bagSeedKnownIds ?? [],
-        bagSeedExcludedIds: newSettings.bagSeedExcludedIds ?? [],
         bagSeedFallbackStrategy: newSettings.bagSeedFallbackStrategy ?? 'level',
         autoAcceptFriendMinLevel: newSettings.autoAcceptFriendMinLevel ?? 0,
         autoCodeRefresh: newSettings.autoCodeRefresh,

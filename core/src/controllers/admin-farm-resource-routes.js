@@ -77,34 +77,6 @@ function registerAdminFarmResourceRoutes({
     }
   });
 
-  app.get("/api/gift-assistant", async (req, res) => {
-    const accountId = requireAccessibleAccount(req, res, getAccountIdFromRequest, canAccessAccount);
-    if (!accountId)
-      return;
-
-    try {
-      const data = await provider.getGiftAssistant(accountId);
-      res.json({ ok: true, data: data || {} });
-    }
-    catch (error) {
-      sendProviderError(res, error);
-    }
-  });
-
-  app.post("/api/gift-assistant/run", async (req, res) => {
-    const accountId = requireAccessibleAccount(req, res, getAccountIdFromRequest, canAccessAccount);
-    if (!accountId)
-      return;
-
-    try {
-      const data = await provider.runGiftAssistant(accountId);
-      res.json({ ok: true, data: data || {} });
-    }
-    catch (error) {
-      sendProviderError(res, error);
-    }
-  });
-
   app.post("/api/fertilizer/buy", async (req, res) => {
     const accountId = requireAccessibleAccount(req, res, getAccountIdFromRequest, canAccessAccount);
     if (!accountId)

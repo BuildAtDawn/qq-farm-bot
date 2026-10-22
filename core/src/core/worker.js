@@ -1686,7 +1686,6 @@ async function startBot(config) {
         startDailyRoutineTimer();
         startStarActivityClaimTimer();
         startMysteryShopAutoBuyTimer();
-        startGiftAssistantLoop();
 
         syncStatus();
     };
@@ -1754,22 +1753,6 @@ async function stopBot() {
 }
 
 // ==================== 踢下线处理 ====================
-
-/** 礼包助手：每日凌晨 1 点自动开启一次（按日期去重，当天只跑一次） */
-function startGiftAssistantLoop() {
-    workerScheduler.clear('gift_assistant');
-    let lastRunDate = '';
-    workerScheduler.setIntervalTask('gift_assistant', 60_000, () => {
-        if (!loginReady || getAutomation().gift_assistant !== true) return;
-        const now = new Date();
-        if (now.getHours() !== 1) return;
-        const dateKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-        if (lastRunDate === dateKey) return;
-        lastRunDate = dateKey;
-        require('../services/gift-assistant').runGiftAssistantOnce()
-            .catch(error => logWarn('礼包助手', `自动开启失败: ${error.message}`));
-    });
-}
 
 function onKickout(info) {
     const reason = info && info.reason ? info.reason : '未知';
@@ -1906,12 +1889,6 @@ async function handleApiCall(msg) {
                 break;
             case 'getProtectLogs':
                 result = await require('../services/pets').getProtectLogs();
-                break;
-            case 'getGiftAssistant':
-                result = await require('../services/gift-assistant').getGiftAssistantState(getAutomation().gift_assistant === true);
-                break;
-            case 'runGiftAssistant':
-                result = await require('../services/gift-assistant').runGiftAssistantOnce();
                 break;
             case 'useItem': {
                 const { useItem } = require('../services/warehouse');

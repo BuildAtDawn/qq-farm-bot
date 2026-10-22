@@ -578,17 +578,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
-  border: 1px solid var(--surface-border);
-  border-radius: 12px;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--surface-border);
   background: var(--surface-1);
-}
-.notification-settings-toolbar > div {
-  min-width: 0;
-}
-.notification-settings-toolbar .BaseButton,
-.notification-settings-toolbar button {
-  flex-shrink: 0;
 }
 .notification-settings-toolbar h3 {
   font-size: 16px;

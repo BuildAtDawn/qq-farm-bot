@@ -285,8 +285,6 @@ function createDataProvider(deps) {
         getMilkTea: ref => callWorkerApi(resolveAccountId(ref), 'getMilkTea'),
         operateMilkTea: (ref, action, params) => callWorkerApi(resolveAccountId(ref), 'operateMilkTea', action, params || {}),
         milkTeaRecords: (ref, kind, params) => callWorkerApi(resolveAccountId(ref), 'milkTeaRecords', kind, params || {}),
-        getGiftAssistant: (ref) => callWorkerApi(resolveAccountId(ref), 'getGiftAssistant'),
-        runGiftAssistant: (ref) => callWorkerApi(resolveAccountId(ref), 'runGiftAssistant', undefined),
         getPetDiaryActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getPetDiaryActivity'),
         getPetDiary: (ref) => callWorkerApi(resolveAccountId(ref), 'getPetDiary'),
         operatePetDiary: (ref, action, params) => callWorkerApi(resolveAccountId(ref), 'operatePetDiary', action, params || {}),
@@ -341,7 +339,6 @@ function createDataProvider(deps) {
                 autoAcceptFriendMinLevel: s.autoAcceptFriendMinLevel,
                 bagSeedPriority: s.bagSeedPriority,
                 bagSeedKnownIds: s.bagSeedKnownIds,
-                bagSeedExcludedIds: s.bagSeedExcludedIds,
                 bagSeedFallbackStrategy: s.bagSeedFallbackStrategy,
             };
             store.applyConfigSnapshot(patch, { accountId: id });
@@ -364,7 +361,6 @@ function createDataProvider(deps) {
                 goldenBugRoundLimit: store.getConfigSnapshot(id).goldenBugRoundLimit,
                 autoAcceptFriendMinLevel: store.getAutoAcceptFriendMinLevel(id),
                 bagSeedPriority: store.getBagSeedPriority(id),
-                bagSeedExcludedIds: store.getConfigSnapshot(id).bagSeedExcludedIds || [],
                 bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(id),
                 configRevision: rev
             };

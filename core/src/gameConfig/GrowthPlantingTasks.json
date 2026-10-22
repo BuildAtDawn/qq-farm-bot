@@ -30,10 +30,9 @@
     {
       "taskId": 100019,
       "seedId": 20064,
-      "desc": "购买7个大葱种子",
+      "desc": "种植7个大葱",
       "total": 7,
-      "condition": "购买N个X种子",
-      "action": "buy"
+      "condition": "种植N个X种子"
     },
     {
       "taskId": 100025,

@@ -42,23 +42,12 @@ export const menuRoutes: MenuItem[] = [
     component: () => import('@/views/Friends.vue'),
   },
   {
-    path: 'gift-assistant',
-    name: 'gift-assistant',
-    group: 'estate',
-    navLabel: '礼包助手',
-    label: '礼包助手',
-    icon: 'i-carbon-box',
-    component: () => import('@/views/GiftAssistant.vue'),
-  },
-  {
     path: 'pet',
     name: 'pet',
     group: 'estate',
     navLabel: '宠物小屋',
     label: '宠物',
     icon: 'i-fa-solid-paw',
-    // 已并入「我的农场」页签，不在侧边栏重复展示（路由保留防旧链接失效）
-    showInNav: false,
     component: () => import('@/views/Pet.vue'),
   },
   {
@@ -87,8 +76,6 @@ export const menuRoutes: MenuItem[] = [
     navLabel: '收藏图鉴',
     label: '图鉴',
     icon: 'i-carbon-book',
-    // 已并入「我的农场」页签，不在侧边栏重复展示（路由保留防旧链接失效）
-    showInNav: false,
     component: () => import('@/views/Illustrated.vue'),
   },
   {
